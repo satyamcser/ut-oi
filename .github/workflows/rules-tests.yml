@@ -1,0 +1,23 @@
+name: Firestore security rules tests
+
+on:
+  push:
+    paths: ['firestore.rules', 'tests/rules/**', '.github/workflows/rules-tests.yml']
+  workflow_dispatch:
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - name: Run rules tests in the Firestore emulator
+        run: npm run test:rules

@@ -1,0 +1,11 @@
+{
+  "name": "Út ơi! — A Tiny Hanoi Adventure",
+  "short_name": "Út ơi!",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#323E64",
+  "theme_color": "#323E64",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

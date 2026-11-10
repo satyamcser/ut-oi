@@ -1,0 +1,233 @@
+rules_version = '2';
+
+// Út ơi! — Firestore security rules.
+//
+// * Every read/write needs a signed-in Firebase Auth user whose UID is one of the
+//   two allowlisted players below. Anonymous visitors and any other account get
+//   nothing (default deny).
+// * Each player can only write their own records; shapes, lengths, IDs and
+//   numbers are validated here, not just in the browser.
+// * Honest limits: scores come from the browser. Rules bound them (range,
+//   +1 play per write, best = max(old, new), max one save per 3 s) but cannot
+//   prove a game was really played. Badges/eggs are cosmetic and self-reported.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ======== EDIT THESE TWO UIDs (Firebase Console → Authentication → Users) ========
+    function satyamUid() { return 'SATYAM_UID_GOES_HERE'; }
+    function utUid() { return 'UT_UID_GOES_HERE'; }
+    // ====================================================================================
+
+    function isPlayer() {
+      return request.auth != null
+        && (request.auth.uid == satyamUid() || request.auth.uid == utUid());
+    }
+    function me() { return request.auth.uid; }
+    function otherPlayer() { return me() == satyamUid() ? utUid() : satyamUid(); }
+    function roleOf(uid) { return uid == satyamUid() ? 'satyam' : 'ut'; }
+    function myArtifact() { return me() == satyamUid() ? 'simba_ball' : 'cat_bell'; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function textOf(v, minLen, maxLen) { return v is string && v.size() >= minLen && v.size() <= maxLen; }
+    function intIn(v, lo, hi) { return v is int && v >= lo && v <= hi; }
+    function onlyChanged(keys) { return incoming().diff(existing()).affectedKeys().hasOnly(keys); }
+    function uniqueList(v, allowed, maxLen) {
+      return v is list && v.size() <= maxLen && v.hasOnly(allowed) && v.toSet().size() == v.size();
+    }
+
+    // ---------- allowlists (keep in sync with src/content/ids.ts) ----------
+    function gameIds() { return ['matcha', 'language', 'pawprints', 'presentation']; }
+    function maxScore(gameId) { return gameId == 'pawprints' ? 60 : (gameId == 'language' ? 96 : 100); }
+    function zoneIds() { return ['cafe', 'academy', 'courtyard', 'auditorium', 'rooftop']; }
+    function pieceIds() { return ['piece_cafe', 'piece_academy', 'piece_courtyard', 'piece_auditorium', 'piece_rooftop']; }
+    function eggIds() {
+      return ['bell_receipt', 'sleepy_cat', 'simba_spins', 'oi_dictionary', 'aodai_inspection', 'projector_cat',
+              'origami_lantern', 'koi_follow', 'cloud_mountain', 'coffee_fees', 'snow_postcard', 'oi_echo'];
+    }
+    function badgeIds() {
+      return ['professor_of_oi', 'tutor_under_investigation', 'coffee_funded_diploma', 'chief_coffee_inspector',
+              'cat_union_rep', 'certified_cat_inspector', 'survived_the_cat', 'postcard_collector',
+              'wardrobe_inspection', 'paper_airplane_pilot'];
+    }
+    function backgroundIds() {
+      return ['lanterns', 'rainy_window', 'koi_pond', 'museum_textile', 'flower_courtyard', 'mountain_clouds',
+              'winter_snow', 'moonlit_rooftop'];
+    }
+    function stickerIds() { return ['coffee', 'paw', 'moon', 'laugh', 'sparkle', 'cat', 'lantern', 'plane']; }
+    function reactionEmojis() { return ['☕', '🐾', '🌙', '😂', '✨']; }
+
+    // ---------- players/{uid}: avatar, badges, discoveries ----------
+    function validAvatar(a) {
+      return a is map
+        && a.keys().hasOnly(['hair', 'hairColor', 'skin', 'outfit', 'accessory'])
+        && a.keys().hasAll(['hair', 'hairColor', 'skin', 'outfit', 'accessory'])
+        && intIn(a.hair, 0, 3) && intIn(a.hairColor, 0, 3) && intIn(a.skin, 0, 3)
+        && a.outfit in ['casual', 'aodai'] && intIn(a.accessory, 0, 3);
+    }
+    function validPlayer(uid) {
+      let d = incoming();
+      let keys = ['role', 'displayName', 'avatar', 'badges', 'eggs', 'pieces', 'visited', 'letterSeen', 'createdAt', 'updatedAt'];
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+        && d.role == roleOf(uid)
+        && textOf(d.displayName, 1, 24)
+        && validAvatar(d.avatar)
+        && uniqueList(d.badges, badgeIds(), 10)
+        && uniqueList(d.eggs, eggIds(), 12)
+        && uniqueList(d.pieces, pieceIds(), 5)
+        && uniqueList(d.visited, zoneIds(), 5)
+        && d.letterSeen is bool
+        && d.updatedAt == request.time;
+    }
+    match /players/{uid} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && uid == me() && validPlayer(uid) && incoming().createdAt == request.time;
+      allow update: if isPlayer() && uid == me() && validPlayer(uid)
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    // ---------- scores/{uid}_{gameId}: best score + play count ----------
+    function validScoreShape(scoreId) {
+      let d = incoming();
+      let keys = ['uid', 'gameId', 'bestScore', 'lastScore', 'totalPlays', 'updatedAt'];
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+        && d.uid == me()
+        && d.gameId in gameIds()
+        && scoreId == me() + '_' + d.gameId
+        && intIn(d.lastScore, 0, maxScore(d.gameId))
+        && d.totalPlays is int
+        && d.updatedAt == request.time;
+    }
+    match /scores/{scoreId} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && validScoreShape(scoreId)
+        && incoming().totalPlays == 1
+        && incoming().bestScore == incoming().lastScore;
+      allow update: if isPlayer() && validScoreShape(scoreId)
+        && incoming().gameId == existing().gameId
+        && incoming().totalPlays == existing().totalPlays + 1
+        && incoming().bestScore == (incoming().lastScore > existing().bestScore ? incoming().lastScore : existing().bestScore)
+        && request.time > existing().updatedAt + duration.value(3, 's');
+      allow delete: if false;
+    }
+
+    // ---------- postcards: shared album (reactions live inside the card) ----------
+    function validReactions(r) {
+      return r is map && r.keys().hasOnly([satyamUid(), utUid()]) && r.values().hasOnly(reactionEmojis());
+    }
+    function validPostcard() {
+      let d = incoming();
+      let keys = ['authorUid', 'kind', 'backgroundId', 'text', 'stickerIds', 'visibility', 'reactions', 'createdAt', 'updatedAt'];
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+        && d.kind in ['postcard', 'phrase', 'echo']
+        && d.backgroundId in backgroundIds()
+        && textOf(d.text, 0, d.kind == 'echo' ? 120 : 300)
+        && uniqueList(d.stickerIds, stickerIds(), 3)
+        && (d.text.size() > 0 || d.stickerIds.size() > 0)
+        && d.visibility == 'shared'
+        && validReactions(d.reactions);
+    }
+    function myReactionOnlyChanged() {
+      return incoming().reactions.diff(existing().reactions).affectedKeys().hasOnly([me()]);
+    }
+    match /postcards/{postId} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && validPostcard()
+        && incoming().authorUid == me()
+        && incoming().reactions.size() == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isPlayer() && (
+        // the author edits their own card (and may react to it)
+        (existing().authorUid == me() && validPostcard()
+          && incoming().authorUid == existing().authorUid
+          && incoming().kind == existing().kind
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && myReactionOnlyChanged())
+        ||
+        // either player sets or removes only their own reaction
+        (onlyChanged(['reactions']) && validReactions(incoming().reactions) && myReactionOnlyChanged())
+      );
+      allow delete: if isPlayer() && existing().authorUid == me();
+    }
+
+    // ---------- languageChallenges: custom questions for the other player ----------
+    function validChallenge() {
+      let d = incoming();
+      let keys = ['authorUid', 'targetUid', 'prompt', 'options', 'correctIndex', 'status', 'answerIndex', 'createdAt', 'updatedAt'];
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+        && textOf(d.prompt, 1, 140)
+        && d.options is list && d.options.size() >= 3 && d.options.size() <= 4
+        && textOf(d.options[0], 1, 140) && textOf(d.options[1], 1, 140) && textOf(d.options[2], 1, 140)
+        && (d.options.size() == 3 || textOf(d.options[3], 1, 140))
+        && intIn(d.correctIndex, 0, d.options.size() - 1)
+        && intIn(d.answerIndex, -1, 3);
+    }
+    match /languageChallenges/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && validChallenge()
+        && incoming().authorUid == me()
+        && incoming().targetUid == otherPlayer()
+        && incoming().status == 'open'
+        && incoming().answerIndex == -1
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isPlayer() && existing().status == 'open' && (
+        // author edits the question while it's still open
+        (existing().authorUid == me() && validChallenge()
+          && onlyChanged(['prompt', 'options', 'correctIndex', 'updatedAt'])
+          && incoming().updatedAt == request.time)
+        ||
+        // the receiver answers or skips, once
+        (existing().targetUid == me()
+          && onlyChanged(['status', 'answerIndex', 'updatedAt'])
+          && incoming().updatedAt == request.time
+          && ((incoming().status == 'answered' && intIn(incoming().answerIndex, 0, existing().options.size() - 1))
+              || (incoming().status == 'skipped' && incoming().answerIndex == -1)))
+      );
+      allow delete: if isPlayer() && existing().authorUid == me();
+    }
+
+    // ---------- friendlyChallenges: "beat my score" (ignorable, never expires) ----------
+    match /friendlyChallenges/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer()
+        && incoming().keys().hasOnly(['creatorUid', 'targetUid', 'gameId', 'scoreToBeat', 'status', 'createdAt', 'updatedAt'])
+        && incoming().keys().hasAll(['creatorUid', 'targetUid', 'gameId', 'scoreToBeat', 'status', 'createdAt', 'updatedAt'])
+        && incoming().creatorUid == me()
+        && incoming().targetUid == otherPlayer()
+        && incoming().gameId in gameIds()
+        && intIn(incoming().scoreToBeat, 1, maxScore(incoming().gameId))
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isPlayer() && existing().targetUid == me() && existing().status == 'open'
+        && onlyChanged(['status', 'updatedAt'])
+        && incoming().updatedAt == request.time
+        && (incoming().status == 'dismissed'
+            || (incoming().status == 'completed'
+                && get(/databases/$(database)/documents/scores/$(me() + '_' + existing().gameId)).data.bestScore >= existing().scoreToBeat));
+      allow delete: if isPlayer() && existing().creatorUid == me();
+    }
+
+    // ---------- sharedWorld/main: co-op pet portrait ----------
+    match /sharedWorld/{docId} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && docId == 'main'
+        && incoming().keys().hasOnly(['petArtifacts', 'updatedAt'])
+        && incoming().keys().hasAll(['petArtifacts', 'updatedAt'])
+        && incoming().petArtifacts is map
+        && incoming().petArtifacts.keys().hasOnly([me()])
+        && incoming().petArtifacts[me()] == myArtifact()
+        && incoming().updatedAt == request.time;
+      allow update: if isPlayer() && docId == 'main'
+        && onlyChanged(['petArtifacts', 'updatedAt'])
+        && incoming().petArtifacts.diff(existing().petArtifacts).affectedKeys().hasOnly([me()])
+        && incoming().petArtifacts[me()] == myArtifact()
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+  }
+}
