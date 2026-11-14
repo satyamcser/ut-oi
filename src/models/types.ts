@@ -1,5 +1,5 @@
 import type { BackgroundId, BadgeId, EggId, GameId, PieceId, Reaction, Role, StickerId, ZoneId } from '../content/ids'
-import type { MomentType, SceneId } from '../content/moments'
+import type { CafeColor, MomentType, SceneId, StoryMode } from '../content/moments'
 
 export interface AvatarConfig {
   hair: number // 0..3 style
@@ -122,6 +122,52 @@ export interface Reply {
   text: string
   createdAt: number | null
   pending: boolean
+}
+
+/** A two-player story: people take turns adding one line. */
+export interface Story {
+  id: string
+  creatorUid: string
+  mode: StoryMode
+  lines: { uid: string; text: string }[]
+  status: 'open' | 'finished'
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+/** The imaginary café both people design together. Just for fun. */
+export interface CafeBoard {
+  name: string
+  tagline: string
+  color: CafeColor
+  dishes: string[]
+  updatedBy: string | null
+  updatedAt: number | null
+}
+
+/** A photo with a few sentences. Visible only to the two players. */
+export interface PhotoStory {
+  id: string
+  authorUid: string
+  data: string // JPEG data URL, resized and re-encoded on the device (no location data)
+  caption: string
+  createdAt: number | null
+  pending: boolean
+}
+
+/**
+ * Live walking together. Opt-in and reciprocal: you can only see the other
+ * person while you are sharing too (enforced in firestore.rules).
+ */
+export interface Presence {
+  share: boolean
+  here: boolean
+  x: number
+  y: number
+  dir: number
+  emote: string
+  emoteAt: number
+  updatedAt: number | null
 }
 
 export interface AuthUser {

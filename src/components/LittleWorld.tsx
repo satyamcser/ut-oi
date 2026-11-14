@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings'
 import { nameOf, useWorld } from '../hooks/useWorld'
 import type { AvatarConfig, Moment } from '../models/types'
 import { DEFAULT_AVATAR } from './AvatarEditor'
+import { CafeBoardPanel, EXTRAS, MiniStory, PhotoCorner, QuestionJar, type Extra } from './Together'
 import { Sheet, timeAgo } from './ui'
 import '../styles/littleworld.css'
 
@@ -189,6 +190,81 @@ function Backdrop({ scene }: { scene: SceneId }) {
         <rect x="237" y="147" width="4" height="16" fill="#D9534F" />
       </svg>
     )
+  if (scene === 'bookshop')
+    return (
+      <svg className="lw-bg" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <rect width="320" height="180" fill="#4A3A35" />
+        {[0, 1, 2, 3].map((row) => (
+          <g key={row}>
+            <rect x="0" y={36 + row * 30} width="190" height="4" fill="#2E2220" />
+            {Array.from({ length: 22 }, (_, i) => {
+              const h = 14 + ((i * 7 + row * 3) % 9)
+              return <rect key={i} x={4 + i * 8.4} y={36 + row * 30 - h} width="7" height={h} fill={['#DA887C', '#779A7A', '#EAA84C', '#B7A9CC', '#9C6B54', '#F9F1DF', '#5E7DA6'][(i + row * 2) % 7]} opacity="0.9" />
+            })}
+          </g>
+        ))}
+        <rect x="204" y="14" width="104" height="96" fill="#3A4870" stroke="#2E2220" strokeWidth="5" />
+        <line x1="256" y1="14" x2="256" y2="110" stroke="#2E2220" strokeWidth="3" />
+        <line x1="204" y1="62" x2="308" y2="62" stroke="#2E2220" strokeWidth="3" />
+        <g className="lw-rain">
+          {Array.from({ length: 24 }, (_, i) => (
+            <rect key={i} x={208 + ((i * 37) % 98)} y={((i * 53) % 120) - 30} width="1" height="8" fill="#B9C7E6" opacity="0.7" />
+          ))}
+        </g>
+        <rect x="200" y="108" width="112" height="8" fill="#7B5A47" />
+        <circle className="lw-glow-soft" cx="176" cy="96" r="40" fill="#FCE3A8" opacity="0.16" />
+        <rect x="170" y="70" width="12" height="9" fill="#EAA84C" />
+        <rect x="175" y="79" width="2" height="34" fill="#2B2230" />
+        <rect y="140" width="320" height="40" fill="#6B4A3A" />
+        <rect x="70" y="148" width="180" height="22" rx="4" fill="#A0535A" opacity="0.8" />
+        <rect x="64" y="122" width="40" height="22" rx="5" fill="#779A7A" />
+        <rect x="216" y="122" width="40" height="22" rx="5" fill="#B7A9CC" />
+        <rect x="146" y="124" width="28" height="5" fill="#7B5A47" />
+        <rect x="150" y="117" width="14" height="7" fill="#F9F1DF" />
+        <path className="lw-steam" d="M155 114q-2-4 1-8" stroke="#FFFFFF" strokeWidth="1.5" fill="none" />
+      </svg>
+    )
+  if (scene === 'airport')
+    return (
+      <svg className="lw-bg" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id={g('day')} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#7FA6D6" />
+            <stop offset="0.7" stopColor="#F2C6A8" />
+            <stop offset="1" stopColor="#F6D49A" />
+          </linearGradient>
+        </defs>
+        <rect width="320" height="120" fill={`url(#${g('day')})`} />
+        <g className="lw-plane-fly">
+          <path d="M0 0 l22 4 l8 -6 l3 1 l-5 7 l10 2 l3 -3 l2 1 l-2 4 l-41 -2 z" fill="#FFFAF0" stroke="#2B2230" strokeWidth="1" />
+        </g>
+        <ellipse cx="60" cy="40" rx="22" ry="6" fill="#FFFFFF" opacity="0.7" />
+        <ellipse cx="250" cy="56" rx="28" ry="7" fill="#FFFFFF" opacity="0.6" />
+        <rect y="96" width="320" height="24" fill="#8A93A6" />
+        <rect y="106" width="320" height="2" fill="#F9F1DF" opacity="0.7" />
+        {[0, 64, 128, 192, 256].map((x) => (
+          <rect key={x} x={x} y="0" width="4" height="120" fill="#5B6478" />
+        ))}
+        <rect y="118" width="320" height="6" fill="#5B6478" />
+        <rect x="10" y="8" width="96" height="30" rx="3" fill="#232A3E" />
+        <text x="16" y="20" fontSize="7" fill="#EAA84C" fontFamily="monospace">
+          HAN ✈ ICN · ON TIME
+        </text>
+        <text x="16" y="31" fontSize="7" fill="#9CD9A0" fontFamily="monospace">
+          SAME SKY · ALWAYS
+        </text>
+        <rect y="124" width="320" height="56" fill="#D9D2C6" />
+        {[0, 40, 80, 120, 160, 200, 240, 280].map((x) => (
+          <rect key={x} x={x} y="124" width="1.5" height="56" fill="#C4BBAE" />
+        ))}
+        {[110, 134, 158, 182].map((x) => (
+          <g key={x}>
+            <rect x={x} y="130" width="20" height="12" rx="2" fill="#5E7DA6" />
+            <rect x={x + 8} y="142" width="4" height="10" fill="#3B4A68" />
+          </g>
+        ))}
+      </svg>
+    )
   return (
     <svg className="lw-bg" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
@@ -239,7 +315,7 @@ export interface Play {
   preview: boolean
 }
 
-type Pose = 'idle' | 'walk' | 'hand' | 'sunset' | 'face' | 'hug' | 'dance' | 'kiss'
+type Pose = 'idle' | 'walk' | 'hand' | 'sunset' | 'face' | 'apart' | 'hug' | 'dance' | 'kiss'
 const POSE: Record<MomentType, Pose> = {
   walk: 'walk',
   hand: 'hand',
@@ -250,6 +326,8 @@ const POSE: Record<MomentType, Pose> = {
   hug: 'hug',
   dance: 'dance',
   kiss: 'kiss',
+  poem: 'face',
+  thinking: 'apart',
 }
 const EMOTE: Record<string, string> = { grin: '😏', eyeroll: '🙄', outrage: '😤', quiet: '…', joke: '😂' }
 
@@ -271,7 +349,7 @@ export function Stage({
   const pose: Pose = play ? POSE[play.type] : 'idle'
   const walking = pose === 'walk' || pose === 'hand'
   const dirFor = (r: Role): { dir: 0 | 1 | 2; flip: boolean } => {
-    if (pose === 'idle') return { dir: 0, flip: false }
+    if (pose === 'idle' || pose === 'apart') return { dir: 0, flip: false }
     if (pose === 'sunset') return { dir: 1, flip: false }
     if (walking) return { dir: 2, flip: false }
     return { dir: 2, flip: r === 'ut' } // face each other
@@ -382,12 +460,12 @@ const store = {
   },
 }
 
-export function LittleWorld({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
+export function LittleWorld({ onClose, onSettings, initialScene }: { onClose: () => void; onSettings: () => void; initialScene?: SceneId }) {
   const { backend, user, role, me, partner, partnerUid, moments, extrasError } = useWorld()
   const { toast, play: sfx, reduced } = useSettings()
   const avatars = useAvatars()
   const news = useMomentNews()
-  const [scene, setScene] = useState<SceneId>(() => (SCENES.some((s) => s.id === store.get(SCENE_KEY)) ? (store.get(SCENE_KEY) as SceneId) : 'riverside'))
+  const [scene, setScene] = useState<SceneId>(() => initialScene ?? (SCENES.some((s) => s.id === store.get(SCENE_KEY)) ? (store.get(SCENE_KEY) as SceneId) : 'riverside'))
   const [play, setPlay] = useState<Play | null>(null)
   const [composing, setComposing] = useState<MomentType | null>(null)
   const [line, setLine] = useState('')
@@ -395,6 +473,7 @@ export function LittleWorld({ onClose, onSettings }: { onClose: () => void; onSe
   const [busy, setBusy] = useState(false)
   const [simba, setSimba] = useState<string | null>(null)
   const [intro, setIntro] = useState(() => !store.get(INTRO_KEY))
+  const [extra, setExtra] = useState<Extra | null>(null)
   const simbaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stageRef = useRef<HTMLDivElement>(null)
 
@@ -523,6 +602,28 @@ export function LittleWorld({ onClose, onSettings }: { onClose: () => void; onSe
       </div>
     )
   })()
+
+  if (extra)
+    return (
+      <Sheet title={EXTRAS.find((x) => x.id === extra)!.label} onClose={onClose} wide tone="night">
+        <div className="lw">
+          <button className="btn btn-small lw-back" onClick={() => setExtra(null)} data-autofocus>
+            ← Back to Our Little World
+          </button>
+          {extrasError ? (
+            <p className="lw-note">This is resting for now — the private database needs its rules update.</p>
+          ) : extra === 'jar' ? (
+            <QuestionJar />
+          ) : extra === 'story' ? (
+            <MiniStory />
+          ) : extra === 'photos' ? (
+            <PhotoCorner />
+          ) : (
+            <CafeBoardPanel />
+          )}
+        </div>
+      </Sheet>
+    )
 
   return (
     <Sheet title="Our Little World" onClose={onClose} wide tone="night">
@@ -691,6 +792,18 @@ export function LittleWorld({ onClose, onSettings }: { onClose: () => void; onSe
             )}
           </details>
         )}
+
+        <section aria-label="More to do together">
+          <h3 className="lw-h">Little things to share</h3>
+          <div className="lw-actions">
+            {EXTRAS.map((x) => (
+              <button key={x.id} className="btn" onClick={() => setExtra(x.id)}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
 
         {waiting.length > 0 && (
           <section aria-label="Waiting">

@@ -5,12 +5,14 @@ import type {
   AuthUser,
   FriendlyChallenge,
   LanguageChallenge,
+  CafeBoard,
   Moment,
   PlayerDoc,
   PlayerPatch,
   Postcard,
   Reply,
   ScoreDoc,
+  Story,
   ScoreResult,
   SharedWorld,
   SyncState,
@@ -32,6 +34,8 @@ interface WorldValue {
   world: SharedWorld
   moments: Moment[]
   replies: Reply[]
+  stories: Story[]
+  cafe: CafeBoard | null
   /** Set when the newer shared features (moments, replies) can't sync. */
   extrasError: string | null
   sync: SyncState
@@ -57,6 +61,8 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
   const [world, setWorld] = useState<SharedWorld>({ petArtifacts: {} })
   const [moments, setMoments] = useState<Moment[]>([])
   const [replies, setReplies] = useState<Reply[]>([])
+  const [stories, setStories] = useState<Story[]>([])
+  const [cafe, setCafe] = useState<CafeBoard | null>(null)
   const [extrasError, setExtrasError] = useState<string | null>(null)
   const [sync, setSync] = useState<SyncState>({ kind: backend.mode === 'demo' ? 'demo' : 'online', lastSynced: null } as SyncState)
   const [error, setError] = useState<string | null>(null)
@@ -94,6 +100,8 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
         setExtrasError(null)
       },
       replies: setReplies,
+      stories: setStories,
+      cafe: setCafe,
       extrasError: setExtrasError,
       sync: setSync,
       error: (m) => {
@@ -172,6 +180,8 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
     world,
     moments,
     replies,
+    stories,
+    cafe,
     extrasError,
     sync,
     error,

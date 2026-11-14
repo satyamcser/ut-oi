@@ -57,9 +57,11 @@ service cloud.firestore {
     function stickerIds() { return ['coffee', 'paw', 'moon', 'laugh', 'sparkle', 'cat', 'lantern', 'plane']; }
     function reactionEmojis() { return ['☕', '🐾', '🌙', '😂', '✨', '🌸', '💛']; }
     // keep in sync with src/content/moments.ts
-    function momentTypes() { return ['walk', 'sunset', 'talk', 'tease', 'comfort', 'hand', 'hug', 'dance', 'kiss']; }
+    function momentTypes() { return ['walk', 'sunset', 'talk', 'tease', 'comfort', 'poem', 'thinking', 'hand', 'hug', 'dance', 'kiss']; }
     function romanticTypes() { return ['hand', 'hug', 'dance', 'kiss']; }
-    function sceneIds() { return ['riverside', 'cafe', 'lanterns']; }
+    function sceneIds() { return ['riverside', 'cafe', 'lanterns', 'bookshop', 'airport']; }
+    function storyModes() { return ['funny', 'cozy', 'poetic']; }
+    function cafeColors() { return ['rose', 'lilac', 'jasmine', 'amber', 'evening']; }
     function variantsFor(t) {
       return t == 'tease' ? ['grin', 'eyeroll', 'outrage']
         : t == 'comfort' ? ['quiet', 'talk', 'joke']
@@ -319,6 +321,91 @@ service cloud.firestore {
         && incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isPlayer() && existing().authorUid == me();
+    }
+
+    // ---------- stories: take turns adding one line ----------
+    function storyLine(x) {
+      return x is map && x.keys().hasOnly(['uid', 'text']) && x.keys().hasAll(['uid', 'text'])
+        && x.uid == me() && textOf(x.text, 1, 140);
+    }
+    match /stories/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer()
+        && incoming().keys().hasOnly(['creatorUid', 'mode', 'lines', 'status', 'createdAt', 'updatedAt'])
+        && incoming().keys().hasAll(['creatorUid', 'mode', 'lines', 'status', 'createdAt', 'updatedAt'])
+        && incoming().creatorUid == me()
+        && incoming().mode in storyModes()
+        && incoming().lines is list && incoming().lines.size() == 1 && storyLine(incoming().lines[0])
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isPlayer() && existing().status == 'open' && incoming().updatedAt == request.time && (
+        // add exactly one line at the end, never twice in a row, earlier lines untouched
+        (onlyChanged(['lines', 'updatedAt'])
+          && incoming().lines.size() == existing().lines.size() + 1
+          && incoming().lines.size() <= 30
+          && incoming().lines[0:existing().lines.size()] == existing().lines
+          && storyLine(incoming().lines[existing().lines.size()])
+          && existing().lines[existing().lines.size() - 1].uid != me())
+        ||
+        // either person can call it finished
+        (onlyChanged(['status', 'updatedAt']) && incoming().status == 'finished')
+      );
+      allow delete: if isPlayer() && existing().creatorUid == me();
+    }
+
+    // ---------- cafeBoard/main: the imaginary café, designed together ----------
+    function dishOk(l, i) { return l.size() <= i || textOf(l[i], 1, 40); }
+    match /cafeBoard/{docId} {
+      allow read: if isPlayer();
+      allow create, update: if isPlayer() && docId == 'main'
+        && incoming().keys().hasOnly(['name', 'tagline', 'color', 'dishes', 'updatedBy', 'updatedAt'])
+        && incoming().keys().hasAll(['name', 'tagline', 'color', 'dishes', 'updatedBy', 'updatedAt'])
+        && textOf(incoming().name, 0, 40)
+        && textOf(incoming().tagline, 0, 80)
+        && incoming().color in cafeColors()
+        && incoming().dishes is list && incoming().dishes.size() <= 6
+        && dishOk(incoming().dishes, 0) && dishOk(incoming().dishes, 1) && dishOk(incoming().dishes, 2)
+        && dishOk(incoming().dishes, 3) && dishOk(incoming().dishes, 4) && dishOk(incoming().dishes, 5)
+        && incoming().updatedBy == me()
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // ---------- photos: a photo with a few sentences, only for the two players ----------
+    match /photos/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer()
+        && incoming().keys().hasOnly(['authorUid', 'data', 'caption', 'createdAt'])
+        && incoming().keys().hasAll(['authorUid', 'data', 'caption', 'createdAt'])
+        && incoming().authorUid == me()
+        && incoming().data is string
+        && incoming().data.size() <= 900000
+        && incoming().data.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')
+        && textOf(incoming().caption, 0, 300)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isPlayer() && existing().authorUid == me();
+    }
+
+    // ---------- presence: live walking together (opt-in, reciprocal) ----------
+    // You can read the other person's position only while they share AND you share.
+    function emotes() { return ['', '👋', '😂', '☕', '🌸', '💛', '🐾']; }
+    function sharing(uid) {
+      let p = /databases/$(database)/documents/presence/$(uid);
+      return exists(p) && get(p).data.share == true;
+    }
+    match /presence/{uid} {
+      allow read: if isPlayer() && (uid == me() || (resource.data.share == true && sharing(me())));
+      allow create, update: if isPlayer() && uid == me()
+        && incoming().keys().hasOnly(['share', 'here', 'x', 'y', 'dir', 'emote', 'emoteAt', 'updatedAt'])
+        && incoming().keys().hasAll(['share', 'here', 'x', 'y', 'dir', 'emote', 'emoteAt', 'updatedAt'])
+        && incoming().share is bool && incoming().here is bool
+        && intIn(incoming().x, 0, 1000) && intIn(incoming().y, 0, 1000) && intIn(incoming().dir, 0, 3)
+        && incoming().emote in emotes() && incoming().emoteAt is int
+        && incoming().updatedAt == request.time
+        && (resource == null || request.time > resource.data.updatedAt + duration.value(250, 'ms'));
+      allow delete: if isPlayer() && uid == me();
     }
   }
 }

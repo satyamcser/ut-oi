@@ -1,11 +1,16 @@
 import type { GameId, Reaction, Role } from '../content/ids'
+import type { StoryMode } from '../content/moments'
 import type {
   AuthUser,
   ChallengeInput,
   FriendlyChallenge,
   LanguageChallenge,
+  CafeBoard,
   Moment,
   MomentAnswer,
+  PhotoStory,
+  Presence,
+  Story,
   MomentInput,
   PlayerDoc,
   PlayerPatch,
@@ -27,6 +32,8 @@ export interface WatchHandlers {
   world(w: SharedWorld): void
   moments(list: Moment[]): void
   replies(list: Reply[]): void
+  stories(list: Story[]): void
+  cafe(board: CafeBoard | null): void
   sync(s: SyncState): void
   error(message: string): void
   /**
@@ -79,6 +86,22 @@ export interface Backend {
 
   addReply(uid: string, postId: string, text: string): Promise<void>
   deleteReply(id: string): Promise<void>
+
+  startStory(uid: string, mode: StoryMode, firstLine: string): Promise<void>
+  addStoryLine(uid: string, storyId: string, text: string): Promise<void>
+  finishStory(storyId: string): Promise<void>
+  deleteStory(storyId: string): Promise<void>
+
+  saveCafe(uid: string, board: Omit<CafeBoard, 'updatedBy' | 'updatedAt'>): Promise<void>
+
+  /** Photos are only loaded while the photo corner is open. */
+  watchPhotos(cb: (list: PhotoStory[]) => void, onError: (message: string) => void): () => void
+  addPhoto(uid: string, data: string, caption: string): Promise<void>
+  deletePhoto(id: string): Promise<void>
+
+  /** Live walking together: my own sharing state, and the other person's position while we both share. */
+  watchPresence(uid: string, partnerUid: string, sharing: boolean, onMine: (p: Presence | null) => void, onPartner: (p: Presence | null) => void): () => void
+  setPresence(uid: string, p: Omit<Presence, 'updatedAt'>): Promise<void>
 
   /** Demo only. */
   demoSignIn?(role: Role): void

@@ -9,6 +9,9 @@ import { pawprintScore } from '../game/map/courtyardMaze'
 import { useSettings } from '../hooks/useSettings'
 import { nameOf, useWorld } from '../hooks/useWorld'
 import { coffeePoints } from '../utils/games'
+import { CHAPTERS, chapterFor, nextChapter, sharedMemories } from '../content/chapters'
+import type { SceneId } from '../content/moments'
+import type { Presence } from '../models/types'
 import { AvatarEditor } from './AvatarEditor'
 import { LanguageAcademy } from './games/LanguageAcademy'
 import { MatchaMission } from './games/MatchaMission'
@@ -25,7 +28,7 @@ type Overlay =
   | { k: 'game'; game: Exclude<GameId, 'language' | 'pawprints'> }
   | { k: 'academy' }
   | { k: 'studio'; tab: 'compose' | 'album' | 'moments' }
-  | { k: 'world' }
+  | { k: 'world'; scene?: SceneId }
   | { k: 'passport' }
   | { k: 'settings' }
   | { k: 'map' }
@@ -52,6 +55,118 @@ export function GameView() {
   const [avatarBusy, setAvatarBusy] = useState(false)
   const pawSave = useScoreSave('pawprints')
   const news = useMomentNews()
+
+  // ---- chapters: grow with shared memories, never go back down (per device floor) ----
+  const memories = sharedMemories({ postcards: world.postcards, replies: world.replies, moments: world.moments, stories: world.stories })
+  const floorKey = user ? `ut-oi.chapter.${user.uid}` : ''
+  const [floor, setFloor] = useState(() => {
+    try {
+      return Number(localStorage.getItem(floorKey)) || 1
+    } catch {
+      return 1
+    }
+  })
+  const chapter = chapterFor(memories, floor)
+  const readyAt = useRef(0)
+  useEffect(() => {
+    if (ready && !readyAt.current) readyAt.current = Date.now()
+  }, [ready])
+  useEffect(() => {
+    if (chapter <= floor) return
+    setFloor(chapter)
+    try {
+      localStorage.setItem(floorKey, String(chapter))
+    } catch {
+      /* fine */
+    }
+    const c = CHAPTERS.find((x) => x.n === chapter)
+    if (c && readyAt.current && Date.now() - readyAt.current > 5000) {
+      play('win')
+      toast(`Chapter ${c.n}: ${c.title} — a lantern gate opened on the map ✨`, 'good')
+    }
+  }, [chapter, floor, floorKey, play, toast])
+  useEffect(() => {
+    if (ready) bus.emit('chapter', chapter)
+  }, [ready, chapter])
+
+  // ---- live walking together: opt-in, reciprocal ----
+  const [myPresence, setMyPresence] = useState<Presence | null>(null)
+  const [theirPresence, setTheirPresence] = useState<Presence | null>(null)
+  const sharing = myPresence?.share === true
+  const pos = useRef({ x: 0, y: 0, dir: 0 })
+  const sent = useRef({ x: -1, y: -1, dir: -1, at: 0, emote: '', emoteAt: 0 })
+  const [clock, setClock] = useState(() => Date.now())
+  const partnerUid = world.partnerUid
+  useEffect(() => {
+    if (!user || !partnerUid) return
+    return backend.watchPresence(user.uid, partnerUid, sharing, setMyPresence, setTheirPresence)
+  }, [backend, user, partnerUid, sharing])
+  useEffect(() => bus.on('myPos', (p) => (pos.current = p)), [])
+  const pushPresence = useCallback(
+    (extra: Partial<Omit<Presence, 'updatedAt'>> = {}) => {
+      if (!user) return Promise.resolve()
+      const s = sent.current
+      const body = { share: true, here: true, x: pos.current.x, y: pos.current.y, dir: pos.current.dir, emote: s.emote, emoteAt: s.emoteAt, ...extra }
+      sent.current = { ...s, x: body.x, y: body.y, dir: body.dir, at: Date.now(), emote: body.emote, emoteAt: body.emoteAt }
+      return backend.setPresence(user.uid, body)
+    },
+    [backend, user],
+  )
+  useEffect(() => {
+    if (!sharing) return
+    const t = setInterval(() => {
+      setClock(Date.now())
+      if (document.visibilityState !== 'visible') return
+      const s = sent.current
+      const moved = pos.current.x !== s.x || pos.current.y !== s.y || pos.current.dir !== s.dir
+      if (moved || Date.now() - s.at > 20000) pushPresence().catch(() => undefined)
+    }, 1000)
+    const away = () => {
+      if (document.visibilityState === 'hidden') pushPresence({ here: false }).catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', away)
+    window.addEventListener('pagehide', away)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', away)
+      window.removeEventListener('pagehide', away)
+    }
+  }, [sharing, pushPresence])
+  const theyAreHere = Boolean(sharing && theirPresence?.share && theirPresence.here && theirPresence.updatedAt && clock - theirPresence.updatedAt < 45000)
+  useEffect(() => {
+    if (ready) bus.emit('presence', theyAreHere && theirPresence ? { x: theirPresence.x, y: theirPresence.y, dir: theirPresence.dir, emote: theirPresence.emote, emoteAt: theirPresence.emoteAt } : null)
+  }, [ready, theyAreHere, theirPresence])
+  const sendEmote = useCallback(
+    (e: string) => {
+      if (!sharing) return
+      bus.emit('emote', e)
+      play('tap')
+      pushPresence({ emote: e, emoteAt: Date.now() }).catch((err) => toast(friendlyError(err), 'error'))
+    },
+    [sharing, pushPresence, play, toast],
+  )
+  const toggleLive = async () => {
+    if (!user) return
+    if (!sharing) {
+      const ok = window.confirm(
+        'Walk together live?\n\nWhile this is on, you and your partner can see each other’s characters move on the street when you’re both here — but only if you BOTH turn it on. You can switch it off anytime.',
+      )
+      if (!ok) return
+      try {
+        await pushPresence({ share: true, here: true })
+        toast('Walking together live is on. If you’re both here, you’ll see each other.', 'good')
+      } catch (e) {
+        toast(`Couldn’t turn it on: ${friendlyError(e)}`, 'error')
+      }
+    } else {
+      try {
+        await pushPresence({ share: false, here: false })
+        toast('Live walking is off. Your character is private again.')
+      } catch (e) {
+        toast(friendlyError(e), 'error')
+      }
+    }
+  }
   const bellCount = useRef(0)
   const catLine = useRef(0)
   const simbaLine = useRef(0)
@@ -79,6 +194,7 @@ export function GameView() {
         pieces: me.pieces,
         reduced,
         firstVisit: firstVisit.current,
+        chapter,
       })
       game.current = { g: created, mod }
     })()
@@ -135,6 +251,18 @@ export function GameView() {
       bus.on('interact', ({ id }) => {
         play('tap')
         if (id.startsWith('zone:')) return void openZone(id.slice(5) as ZoneId)
+        if (id.startsWith('place:')) return void setOverlay({ k: 'world', scene: id.slice(6) as SceneId })
+        if (id.startsWith('gate:')) {
+          const c = CHAPTERS.find((x) => x.n === Number(id.slice(5)))
+          if (c)
+            say([
+              { who: 'SYSTEM', text: `A lantern gate. A little sign says: “Chapter ${c.n}: ${c.title}.”` },
+              { who: 'SYSTEM', text: `It opens when you two have shared ${c.needs} little memories — postcards, replies, moments and story lines all count.` },
+            ])
+          return
+        }
+        if (id === 'postbox') return void setOverlay({ k: 'studio', tab: 'compose' })
+        if (id === 'other') return void sendEmote('👋')
         if (id.startsWith('piece:')) {
           const piece = `piece_${id.slice(6)}` as PieceId
           play('good')
@@ -203,7 +331,7 @@ export function GameView() {
       }),
     ]
     return () => offs.forEach((o) => o())
-  }, [play, openZone, unlock, me, say, toast, backend, user, role, pawSave])
+  }, [play, openZone, unlock, me, say, toast, backend, user, role, pawSave, sendEmote])
 
   const startPawprints = () => {
     if (!game.current || !role) return
@@ -261,6 +389,9 @@ export function GameView() {
           {sync.kind === 'demo' ? 'DEMO · not saved' : sync.kind === 'offline' ? 'Offline · not syncing' : `Synced ${timeAgo(sync.lastSynced)}`}
         </span>
         <span className="hud-actions" hidden={overlay?.k === 'paw'}>
+          <button className={`hud-btn ${sharing ? 'hud-live-on' : ''}`} onClick={() => void toggleLive()} aria-pressed={sharing} aria-label={sharing ? 'Walking together live: on' : 'Walk together live: off'} title="Walk together live">
+            👣
+          </button>
           <button className="hud-btn hud-world" onClick={() => setOverlay({ k: 'world' })} aria-label={news.count ? 'Our little world — something is waiting for you' : 'Our little world'}>
             💞{news.count > 0 && <span className="hud-dot" aria-hidden="true" />}
           </button>
@@ -292,6 +423,17 @@ export function GameView() {
         </p>
       )}
 
+      {sharing && !paused && (
+        <div className="live-bar" role="status">
+          <span>{theyAreHere ? `✨ ${partner?.displayName ?? 'They'} is here` : 'Live · waiting for company'}</span>
+          {theyAreHere &&
+            ['👋', '😂', '☕', '🌸', '💛', '🐾'].map((e) => (
+              <button key={e} className="live-emote" onClick={() => sendEmote(e)} aria-label={`Send ${e}`}>
+                {e}
+              </button>
+            ))}
+        </div>
+      )}
       {overlay?.k !== 'paw' && (
         <div className="controls" aria-hidden={paused}>
           <div className="dpad" aria-label="Movement pad">
@@ -400,7 +542,7 @@ export function GameView() {
         />
       )}
       {overlay?.k === 'studio' && <PostcardStudio startTab={overlay.tab} onClose={() => setOverlay(null)} />}
-      {overlay?.k === 'world' && <LittleWorld onClose={() => setOverlay(null)} onSettings={() => setOverlay({ k: 'settings' })} />}
+      {overlay?.k === 'world' && <LittleWorld initialScene={overlay.scene} onClose={() => setOverlay(null)} onSettings={() => setOverlay({ k: 'settings' })} />}
       {overlay?.k === 'passport' && (
         <Passport
           onClose={() => setOverlay(null)}
@@ -415,6 +557,13 @@ export function GameView() {
       {overlay?.k === 'settings' && <SettingsPanel onClose={() => setOverlay(null)} onAvatar={() => setOverlay({ k: 'avatar' })} onLetter={() => setOverlay({ k: 'letter' })} />}
       {overlay?.k === 'map' && (
         <QuestMap
+          chapter={chapter}
+          memories={memories}
+          next={nextChapter(chapter)}
+          onPlace={(id) => {
+            setOverlay(null)
+            setTimeout(() => bus.emit('gotoSpot', id), 50)
+          }}
           onClose={() => setOverlay(null)}
           onGo={(z) => {
             setOverlay(null)

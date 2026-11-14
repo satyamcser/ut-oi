@@ -500,3 +500,223 @@
     transform: translateY(-3px);
   }
 }
+
+/* ---------- bookshop & postcard corner ---------- */
+.pose-apart .av-satyam {
+  --x: 8%;
+}
+.pose-apart .av-ut {
+  --x: 80%;
+}
+.lw-rain {
+  animation: lw-rain 0.9s linear infinite;
+}
+.lw-plane-fly {
+  animation: lw-plane 14s linear infinite;
+}
+.pose-apart .lw-plane-fly {
+  animation-duration: 7s;
+}
+.lw-stage.still .lw-plane-fly {
+  transform: translate(150px, 36px);
+}
+@keyframes lw-rain {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(30px);
+  }
+}
+@keyframes lw-plane {
+  from {
+    transform: translate(-50px, 60px);
+  }
+  to {
+    transform: translate(360px, 14px);
+  }
+}
+
+/* ---------- little things to share ---------- */
+.lw-back {
+  justify-self: start;
+}
+.lw-jar-q {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--parchment);
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.lw-story-lines {
+  margin: 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 4px;
+}
+.lw-story-lines li.mine {
+  color: #fce3a8;
+}
+.lw-file {
+  justify-self: start;
+  position: relative;
+}
+.lw-photo {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  background: #1f2747;
+}
+.lw-photos {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .lw-photos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.lw-photo-card {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.lw-photo-card figcaption {
+  font-size: 0.95rem;
+}
+.lw-menu {
+  padding: 16px;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.lw-menu p {
+  margin: 0;
+}
+.lw-menu-name {
+  font-family: var(--pixel);
+  font-size: 1.4rem;
+}
+.lw-menu-tag {
+  font-style: italic;
+  opacity: 0.9;
+}
+.lw-menu ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.lw-menu li::before {
+  content: '✦ ';
+}
+
+/* ---------- chapters, side quests, live walking ---------- */
+.chapter-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--parchment);
+  box-shadow: var(--shadow);
+}
+.chapter-bar {
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  overflow: hidden;
+}
+.chapter-bar div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--amber), var(--coral));
+}
+.chapter-section {
+  display: grid;
+  gap: 4px;
+}
+.chapter-section h3 {
+  margin: 8px 0 0;
+}
+.chapter-section.locked {
+  opacity: 0.6;
+}
+.chapter-section .btn {
+  justify-self: start;
+}
+.side-quests {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.side-quests li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.side-quests li > span:last-child {
+  display: grid;
+}
+.side-quests li.done strong {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+.hud-live-on {
+  background: var(--amber);
+}
+.live-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 168px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 3px 0 var(--ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.live-emote {
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.live-emote:hover {
+  background: var(--parchment);
+}
+.pose-apart .av-satyam .lw-bubble {
+  left: 0;
+  transform: none;
+  animation-name: lw-fade;
+}
+.pose-apart .av-ut .lw-bubble {
+  left: auto;
+  right: 0;
+  transform: none;
+  animation-name: lw-fade;
+}
+.live-bar > span {
+  white-space: nowrap;
+}

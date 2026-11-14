@@ -19,6 +19,11 @@ export interface BusEvents {
   pawEnd: { found: number; artifact: boolean; quit: boolean }
   pawCat: void
   pawQuit: void
+  chapter: number
+  gotoSpot: string
+  presence: { x: number; y: number; dir: number; emote: string; emoteAt: number } | null
+  myPos: { x: number; y: number; dir: number }
+  emote: string
 }
 
 type Handler<K extends keyof BusEvents> = (payload: BusEvents[K]) => void

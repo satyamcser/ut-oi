@@ -29,8 +29,8 @@ import {
   type QuerySnapshot,
 } from 'firebase/firestore'
 import { ARTIFACT_FOR, type BackgroundId, type BadgeId, type EggId, type GameId, type PieceId, type Reaction, type StickerId, type ZoneId } from '../content/ids'
-import type { MomentType, SceneId } from '../content/moments'
-import type { FriendlyChallenge, LanguageChallenge, Moment, Postcard, Reply, ScoreDoc } from '../models/types'
+import type { CafeColor, MomentType, SceneId, StoryMode } from '../content/moments'
+import type { FriendlyChallenge, LanguageChallenge, Moment, Postcard, Presence, Reply, ScoreDoc, Story } from '../models/types'
 import { friendlyError, type Backend } from './backend'
 import { firebaseConfig, roleFromUid } from './config'
 
@@ -171,6 +171,34 @@ export function createFirebaseBackend(): Backend {
               createdAt: ms(data.createdAt),
               pending,
             }) as Reply),
+          )
+        }, (e) => h.extrasError(friendlyError(e))),
+        onSnapshot(query(collection(db, 'stories'), orderBy('createdAt', 'desc'), limit(50)), (snap) => {
+          h.stories(
+            list(snap).map(({ id, data }) => ({
+              id,
+              creatorUid: data.creatorUid,
+              mode: data.mode as StoryMode,
+              lines: arr<{ uid: string; text: string }>(data.lines),
+              status: data.status,
+              createdAt: ms(data.createdAt),
+              updatedAt: ms(data.updatedAt),
+            }) as Story),
+          )
+        }, (e) => h.extrasError(friendlyError(e))),
+        onSnapshot(doc(db, 'cafeBoard', 'main'), (snap) => {
+          const d = snap.data()
+          h.cafe(
+            d
+              ? {
+                  name: String(d.name ?? ''),
+                  tagline: String(d.tagline ?? ''),
+                  color: d.color as CafeColor,
+                  dishes: arr<string>(d.dishes),
+                  updatedBy: d.updatedBy ?? null,
+                  updatedAt: ms(d.updatedAt),
+                }
+              : null,
           )
         }, (e) => h.extrasError(friendlyError(e))),
       ]
@@ -328,6 +356,113 @@ export function createFirebaseBackend(): Backend {
     },
     async deleteReply(id) {
       await deleteDoc(doc(db, 'replies', id))
+    },
+
+    async startStory(uid, mode, firstLine) {
+      await addDoc(collection(db, 'stories'), {
+        creatorUid: uid,
+        mode,
+        lines: [{ uid, text: firstLine }],
+        status: 'open',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    },
+    async addStoryLine(uid, storyId, text) {
+      const ref = doc(db, 'stories', storyId)
+      // A transaction keeps earlier lines exactly as they are, even if both write at once.
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref)
+        const lines = arr<{ uid: string; text: string }>(snap.data()?.lines)
+        if (lines.length && lines[lines.length - 1].uid === uid) throw new Error('It’s the other person’s turn.')
+        tx.update(ref, { lines: [...lines, { uid, text }], updatedAt: serverTimestamp() })
+      })
+    },
+    async finishStory(storyId) {
+      await updateDoc(doc(db, 'stories', storyId), { status: 'finished', updatedAt: serverTimestamp() })
+    },
+    async deleteStory(storyId) {
+      await deleteDoc(doc(db, 'stories', storyId))
+    },
+
+    async saveCafe(uid, board) {
+      await setDoc(doc(db, 'cafeBoard', 'main'), { ...board, updatedBy: uid, updatedAt: serverTimestamp() })
+    },
+
+    watchPhotos(cb, onError) {
+      return onSnapshot(
+        query(collection(db, 'photos'), orderBy('createdAt', 'desc'), limit(30)),
+        { includeMetadataChanges: true },
+        (snap) =>
+          cb(
+            snap.docs.map((d) => {
+              const data = d.data({ serverTimestamps: 'estimate' })
+              return {
+                id: d.id,
+                authorUid: data.authorUid,
+                data: String(data.data ?? ''),
+                caption: String(data.caption ?? ''),
+                createdAt: ms(data.createdAt),
+                pending: d.metadata.hasPendingWrites,
+              }
+            }),
+          ),
+        (e) => onError(friendlyError(e)),
+      )
+    },
+    async addPhoto(uid, data, caption) {
+      await addDoc(collection(db, 'photos'), { authorUid: uid, data, caption, createdAt: serverTimestamp() })
+    },
+    async deletePhoto(id) {
+      await deleteDoc(doc(db, 'photos', id))
+    },
+
+    watchPresence(uid, partnerUid, sharing, onMine, onPartner) {
+      const toPresence = (d: DocumentData | undefined): Presence | null =>
+        d
+          ? {
+              share: d.share === true,
+              here: d.here === true,
+              x: Number(d.x ?? 0),
+              y: Number(d.y ?? 0),
+              dir: Number(d.dir ?? 0),
+              emote: String(d.emote ?? ''),
+              emoteAt: Number(d.emoteAt ?? 0),
+              updatedAt: ms(d.updatedAt),
+            }
+          : null
+      const offMine = onSnapshot(
+        doc(db, 'presence', uid),
+        (snap) => onMine(toPresence(snap.data({ serverTimestamps: 'estimate' }))),
+        () => onMine(null),
+      )
+      // The other person's position is only readable while BOTH share; retry quietly until then.
+      let offPartner: (() => void) | null = null
+      let retry: ReturnType<typeof setTimeout> | null = null
+      let alive = true
+      const listen = () => {
+        if (!alive || !sharing) return
+        offPartner = onSnapshot(
+          doc(db, 'presence', partnerUid),
+          (snap) => onPartner(toPresence(snap.data({ serverTimestamps: 'estimate' }))),
+          () => {
+            onPartner(null)
+            offPartner = null
+            retry = setTimeout(listen, 15000)
+          },
+        )
+      }
+      if (sharing) listen()
+      else onPartner(null)
+      return () => {
+        alive = false
+        offMine()
+        offPartner?.()
+        if (retry) clearTimeout(retry)
+      }
+    },
+    async setPresence(uid, p) {
+      await setDoc(doc(db, 'presence', uid), { ...p, updatedAt: serverTimestamp() })
     },
   }
 }

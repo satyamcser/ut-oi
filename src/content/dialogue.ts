@@ -122,6 +122,7 @@ export const POEM = [
 ]
 
 export const POSTCARD_PROMPTS = [
+  'One good thing today',
   'One tiny thing that made you smile today',
   'A place I want to photograph',
   'A word I learned',

@@ -297,3 +297,88 @@ describe('postcard replies', () => {
     await assertFails(getDocs(collection(db(STRANGER), 'replies')))
   })
 })
+
+describe('stories', () => {
+  const story = (uid: string, extra: Record<string, unknown> = {}) => ({
+    creatorUid: uid,
+    mode: 'cozy',
+    lines: [{ uid, text: 'It started raining…' }],
+    status: 'open',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...extra,
+  })
+  it('take turns adding exactly one line, without rewriting earlier lines', async () => {
+    await assertFails(setDoc(doc(db(UT), 'stories', 's0'), story(SATYAM)))
+    await assertFails(setDoc(doc(db(UT), 'stories', 's0'), story(UT, { mode: 'spicy' })))
+    await assertSucceeds(setDoc(doc(db(UT), 'stories', 's1'), story(UT)))
+    const first = { uid: UT, text: 'It started raining…' }
+    // Út can't add two lines in a row
+    await assertFails(updateDoc(doc(db(UT), 'stories', 's1'), { lines: [first, { uid: UT, text: 'again' }], updatedAt: serverTimestamp() }))
+    // Satyam can't rewrite her line or write as her
+    await assertFails(updateDoc(doc(db(SATYAM), 'stories', 's1'), { lines: [{ uid: UT, text: 'changed' }, { uid: SATYAM, text: 'hi' }], updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(db(SATYAM), 'stories', 's1'), { lines: [first, { uid: UT, text: 'hi' }], updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(doc(db(SATYAM), 'stories', 's1'), { lines: [first, { uid: SATYAM, text: '…so we found a bookshop.' }], updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(doc(db(UT), 'stories', 's1'), { status: 'finished', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(db(SATYAM), 'stories', 's1'), { status: 'open', updatedAt: serverTimestamp() }))
+    await assertFails(deleteDoc(doc(db(SATYAM), 'stories', 's1')))
+    await assertSucceeds(deleteDoc(doc(db(UT), 'stories', 's1')))
+  })
+})
+
+describe('café board', () => {
+  const board = (uid: string, extra: Record<string, unknown> = {}) => ({ name: 'Út’s Kitchen', tagline: '', color: 'amber', dishes: ['Phở chay'], updatedBy: uid, updatedAt: serverTimestamp(), ...extra })
+  it('either player edits main, honestly signed, within limits', async () => {
+    await assertFails(setDoc(doc(db(SATYAM), 'cafeBoard', 'other'), board(SATYAM)))
+    await assertFails(setDoc(doc(db(SATYAM), 'cafeBoard', 'main'), board(UT)))
+    await assertFails(setDoc(doc(db(SATYAM), 'cafeBoard', 'main'), board(SATYAM, { dishes: ['', 'x'] })))
+    await assertFails(setDoc(doc(db(SATYAM), 'cafeBoard', 'main'), board(SATYAM, { dishes: ['1', '2', '3', '4', '5', '6', '7'] })))
+    await assertFails(setDoc(doc(db(SATYAM), 'cafeBoard', 'main'), board(SATYAM, { color: 'neon' })))
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'cafeBoard', 'main'), board(SATYAM)))
+    await assertSucceeds(setDoc(doc(db(UT), 'cafeBoard', 'main'), board(UT, { name: 'No Salary Café' })))
+    await assertFails(setDoc(doc(db(STRANGER), 'cafeBoard', 'main'), board(STRANGER)))
+    await assertFails(deleteDoc(doc(db(UT), 'cafeBoard', 'main')))
+  })
+})
+
+describe('photos', () => {
+  const photo = (uid: string, extra: Record<string, unknown> = {}) => ({ authorUid: uid, data: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==', caption: 'Sunset', createdAt: serverTimestamp(), ...extra })
+  it('are JPEG data only, size-limited, readable only by the two players, deletable only by the author', async () => {
+    await assertFails(setDoc(doc(db(UT), 'photos', 'x0'), photo(SATYAM)))
+    await assertFails(setDoc(doc(db(UT), 'photos', 'x0'), photo(UT, { data: 'data:text/html;base64,PHNjcmlwdD4=' })))
+    await assertFails(setDoc(doc(db(UT), 'photos', 'x0'), photo(UT, { data: 'data:image/jpeg;base64,' + 'A'.repeat(900000) })))
+    await assertSucceeds(setDoc(doc(db(UT), 'photos', 'x1'), photo(UT)))
+    await assertSucceeds(getDoc(doc(db(SATYAM), 'photos', 'x1')))
+    await assertFails(getDoc(doc(db(STRANGER), 'photos', 'x1')))
+    await assertFails(updateDoc(doc(db(UT), 'photos', 'x1'), { caption: 'edited' }))
+    await assertFails(deleteDoc(doc(db(SATYAM), 'photos', 'x1')))
+    await assertSucceeds(deleteDoc(doc(db(UT), 'photos', 'x1')))
+  })
+})
+
+describe('new scenes', () => {
+  it('accept the bookshop and postcard corner moments', async () => {
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'moments', 'b1'), moment(SATYAM, UT, { type: 'poem', scene: 'bookshop' })))
+    await assertSucceeds(setDoc(doc(db(UT), 'moments', 'a1'), moment(UT, SATYAM, { type: 'thinking', scene: 'airport' })))
+    await assertFails(setDoc(doc(db(UT), 'moments', 'a2'), moment(UT, SATYAM, { type: 'thinking', scene: 'moon' })))
+  })
+})
+
+describe('presence (live walking together)', () => {
+  const pres = (extra: Record<string, unknown> = {}) => ({ share: true, here: true, x: 360, y: 250, dir: 0, emote: '', emoteAt: 0, updatedAt: serverTimestamp(), ...extra })
+  it('is reciprocal: you see the other person only while you both share', async () => {
+    await assertFails(setDoc(doc(db(SATYAM), 'presence', UT), pres()))
+    await assertFails(setDoc(doc(db(UT), 'presence', UT), pres({ emote: '💀' })))
+    await assertFails(setDoc(doc(db(UT), 'presence', UT), pres({ x: 5000 })))
+    await assertSucceeds(setDoc(doc(db(UT), 'presence', UT), pres()))
+    // Satyam isn't sharing yet: can't see her
+    await assertFails(getDoc(doc(db(SATYAM), 'presence', UT)))
+    await seed(`presence/${SATYAM}`, { share: true, here: true, x: 1, y: 1, dir: 0, emote: '', emoteAt: 0, updatedAt: Timestamp.fromMillis(Date.now() - 5000) })
+    await assertSucceeds(getDoc(doc(db(SATYAM), 'presence', UT)))
+    await assertFails(getDoc(doc(db(STRANGER), 'presence', UT)))
+    // she switches it off: hidden again
+    await seed(`presence/${UT}`, { share: false, here: false, x: 1, y: 1, dir: 0, emote: '', emoteAt: 0, updatedAt: Timestamp.fromMillis(Date.now() - 5000) })
+    await assertFails(getDoc(doc(db(SATYAM), 'presence', UT)))
+    await assertSucceeds(getDoc(doc(db(UT), 'presence', UT)))
+  })
+})

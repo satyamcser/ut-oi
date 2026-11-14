@@ -2,8 +2,8 @@
 // memory. Nothing is saved, nothing is shared, nobody else can see it.
 // It applies the same ownership rules as firestore.rules so the UI behaves the same.
 import { ARTIFACT_FOR, LIMITS, MAX_SCORE, type GameId, type Role } from '../content/ids'
-import { isExpired, momentDef, MOMENT_LIMITS } from '../content/moments'
-import type { AuthUser, FriendlyChallenge, LanguageChallenge, Moment, PlayerDoc, Postcard, Reply, ScoreDoc } from '../models/types'
+import { CAFE_COLORS, CAFE_LIMITS, isExpired, momentDef, MOMENT_LIMITS, PHOTO_LIMITS, STORY_LIMITS, STORY_MODES } from '../content/moments'
+import type { AuthUser, CafeBoard, FriendlyChallenge, LanguageChallenge, Moment, PhotoStory, PlayerDoc, Postcard, Presence, Reply, ScoreDoc, Story } from '../models/types'
 import type { Backend, WatchHandlers } from './backend'
 
 export const DEMO_UIDS: Record<Role, string> = { satyam: 'demo-satyam', ut: 'demo-ut' }
@@ -23,6 +23,13 @@ export function createDemoBackend(): Backend {
   const petArtifacts: Record<string, string> = {}
   let moments: Moment[] = []
   let replies: Reply[] = []
+  let stories: Story[] = []
+  let cafe: CafeBoard | null = null
+  let photos: PhotoStory[] = []
+  const photoWatchers = new Set<(l: PhotoStory[]) => void>()
+  const presence = new Map<string, Presence>()
+  const presenceWatchers = new Set<() => void>()
+  const emitPhotos = () => photoWatchers.forEach((w) => w([...photos]))
   const watchers = new Set<WatchHandlers>()
 
   const emit = () => {
@@ -35,6 +42,8 @@ export function createDemoBackend(): Backend {
       h.world({ petArtifacts: { ...petArtifacts } })
       h.moments([...moments])
       h.replies([...replies])
+      h.stories(stories.map((s) => ({ ...s, lines: [...s.lines] })))
+      h.cafe(cafe ? { ...cafe, dishes: [...cafe.dishes] } : null)
       h.sync({ kind: 'demo' })
     }
   }
@@ -259,6 +268,84 @@ export function createDemoBackend(): Backend {
       replies = [...replies, { id: id(), postId, authorUid: uid, text, createdAt: Date.now(), pending: false }]
       emit()
     },
+    async startStory(uid, mode, firstLine) {
+      await tick()
+      if (uid !== me() || !STORY_MODES.some((m) => m.id === mode)) throw new Error('permission-denied')
+      checkText(firstLine, STORY_LIMITS.line, 1)
+      const now = Date.now()
+      stories = [{ id: id(), creatorUid: uid, mode, lines: [{ uid, text: firstLine }], status: 'open', createdAt: now, updatedAt: now }, ...stories]
+      emit()
+    },
+    async addStoryLine(uid, sid, text) {
+      await tick()
+      const s = stories.find((x) => x.id === sid)
+      if (uid !== me() || !s || s.status !== 'open' || s.lines.length >= STORY_LIMITS.lines) throw new Error('permission-denied')
+      if (s.lines[s.lines.length - 1].uid === uid) throw new Error('It’s the other person’s turn.')
+      checkText(text, STORY_LIMITS.line, 1)
+      stories = stories.map((x) => (x.id === sid ? { ...x, lines: [...x.lines, { uid, text }], updatedAt: Date.now() } : x))
+      emit()
+    },
+    async finishStory(sid) {
+      await tick()
+      const s = stories.find((x) => x.id === sid)
+      if (!s || s.status !== 'open') throw new Error('permission-denied')
+      stories = stories.map((x) => (x.id === sid ? { ...x, status: 'finished', updatedAt: Date.now() } : x))
+      emit()
+    },
+    async deleteStory(sid) {
+      await tick()
+      const s = stories.find((x) => x.id === sid)
+      if (!s || s.creatorUid !== me()) throw new Error('permission-denied')
+      stories = stories.filter((x) => x.id !== sid)
+      emit()
+    },
+
+    async saveCafe(uid, board) {
+      await tick()
+      if (uid !== me() || !CAFE_COLORS.some((c) => c.id === board.color) || board.dishes.length > CAFE_LIMITS.dishes) throw new Error('permission-denied')
+      checkText(board.name, CAFE_LIMITS.name)
+      checkText(board.tagline, CAFE_LIMITS.tagline)
+      board.dishes.forEach((d) => checkText(d, CAFE_LIMITS.dish, 1))
+      cafe = { ...board, dishes: [...board.dishes], updatedBy: uid, updatedAt: Date.now() }
+      emit()
+    },
+
+    watchPhotos(cb) {
+      photoWatchers.add(cb)
+      setTimeout(() => cb([...photos]), 0)
+      return () => photoWatchers.delete(cb)
+    },
+    async addPhoto(uid, data, caption) {
+      await tick()
+      if (uid !== me() || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(data) || data.length > PHOTO_LIMITS.maxChars) throw new Error('permission-denied')
+      checkText(caption, PHOTO_LIMITS.caption)
+      photos = [{ id: id(), authorUid: uid, data, caption, createdAt: Date.now(), pending: false }, ...photos]
+      emitPhotos()
+    },
+    async deletePhoto(pid) {
+      await tick()
+      const p = photos.find((x) => x.id === pid)
+      if (!p || p.authorUid !== me()) throw new Error('permission-denied')
+      photos = photos.filter((x) => x.id !== pid)
+      emitPhotos()
+    },
+
+    // The demo has nobody else walking around; your own sharing switch still works.
+    watchPresence(uid, _partnerUid, _sharing, onMine, onPartner) {
+      setTimeout(() => {
+        onMine(presence.get(uid) ?? null)
+        onPartner(null)
+      }, 0)
+      const fn = () => onMine(presence.get(uid) ?? null)
+      presenceWatchers.add(fn)
+      return () => presenceWatchers.delete(fn)
+    },
+    async setPresence(uid, p) {
+      if (uid !== me()) throw new Error('permission-denied')
+      presence.set(uid, { ...p, updatedAt: Date.now() })
+      presenceWatchers.forEach((w) => w())
+    },
+
     async deleteReply(rid) {
       await tick()
       const r = replies.find((x) => x.id === rid)

@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { WatchHandlers } from '../src/data/backend'
 import { createDemoBackend, DEMO_UIDS } from '../src/data/demoBackend'
-import type { LanguageChallenge, Moment, PlayerDoc, Postcard, Reply } from '../src/models/types'
+import type { CafeBoard, LanguageChallenge, Moment, PlayerDoc, Postcard, Reply, Story } from '../src/models/types'
 
 function watchAll() {
-  const state: { postcards: Postcard[]; langs: LanguageChallenge[]; world: Record<string, string>; moments: Moment[]; replies: Reply[]; players: PlayerDoc[] } = {
+  const state: { postcards: Postcard[]; langs: LanguageChallenge[]; world: Record<string, string>; moments: Moment[]; replies: Reply[]; players: PlayerDoc[]; stories: Story[]; cafe: CafeBoard | null } = {
     postcards: [],
     langs: [],
     world: {},
     moments: [],
     replies: [],
     players: [],
+    stories: [] as Story[],
+    cafe: null as CafeBoard | null,
   }
   const h: WatchHandlers = {
     players: (p) => (state.players = p),
@@ -21,6 +23,8 @@ function watchAll() {
     world: (w) => (state.world = w.petArtifacts),
     moments: (m) => (state.moments = m),
     replies: (r) => (state.replies = r),
+    stories: (l) => (state.stories = l),
+    cafe: (c) => (state.cafe = c),
     sync: () => {},
     error: () => {},
     extrasError: () => {},
@@ -138,5 +142,46 @@ describe('demo backend follows the same ownership rules', () => {
     api.demoSignIn!('ut')
     await expect(api.deleteReply(state.replies[0].id)).rejects.toThrow()
     expect(state.replies[0]).toMatchObject({ postId: pid, authorUid: DEMO_UIDS.satyam })
+  })
+
+  it('stories: take turns, one line at a time; only the creator deletes', async () => {
+    const api = createDemoBackend()
+    const { state, h } = watchAll()
+    api.watch('x', h)
+    api.demoSignIn!('ut')
+    await api.startStory(DEMO_UIDS.ut, 'funny', 'Simba walked into the café and ordered…')
+    const sid = state.stories[0].id
+    await expect(api.addStoryLine(DEMO_UIDS.ut, sid, 'again me')).rejects.toThrow()
+    api.demoSignIn!('satyam')
+    await api.addStoryLine(DEMO_UIDS.satyam, sid, '…a matcha latte, with extra treats.')
+    await expect(api.addStoryLine(DEMO_UIDS.satyam, sid, 'me twice')).rejects.toThrow()
+    await expect(api.deleteStory(sid)).rejects.toThrow()
+    await api.finishStory(sid)
+    await expect(api.addStoryLine(DEMO_UIDS.ut, sid, 'too late')).rejects.toThrow()
+    expect(state.stories[0]).toMatchObject({ status: 'finished' })
+    expect(state.stories[0].lines).toHaveLength(2)
+  })
+
+  it('café board: either player saves, within limits', async () => {
+    const api = createDemoBackend()
+    const { state, h } = watchAll()
+    api.watch('x', h)
+    api.demoSignIn!('satyam')
+    await expect(api.saveCafe(DEMO_UIDS.satyam, { name: 'x', tagline: '', color: 'neon' as never, dishes: [] })).rejects.toThrow()
+    await expect(api.saveCafe(DEMO_UIDS.satyam, { name: 'x', tagline: '', color: 'rose', dishes: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).rejects.toThrow()
+    await api.saveCafe(DEMO_UIDS.satyam, { name: 'Út’s Kitchen', tagline: 'No salary for the engineer', color: 'jasmine', dishes: ['Phở chay'] })
+    expect(state.cafe).toMatchObject({ name: 'Út’s Kitchen', updatedBy: DEMO_UIDS.satyam })
+  })
+
+  it('photos: only JPEG data, only the author deletes', async () => {
+    const api = createDemoBackend()
+    let photos: { id: string }[] = []
+    api.demoSignIn!('ut')
+    api.watchPhotos((l) => (photos = l), () => {})
+    await expect(api.addPhoto(DEMO_UIDS.ut, 'data:text/html;base64,PHNjcmlwdD4=', '')).rejects.toThrow()
+    await api.addPhoto(DEMO_UIDS.ut, 'data:image/jpeg;base64,/9j/4AAQ', 'Sunset on the way home')
+    api.demoSignIn!('satyam')
+    await expect(api.deletePhoto(photos[0].id)).rejects.toThrow()
+    expect(photos).toHaveLength(1)
   })
 })

@@ -102,14 +102,17 @@ export const T = {
   SCOOTER_PARKED: 31,
   LEAVES: 32,
   STICKY_BOARD: 33,
+  GATE_CLOSED: 34,
+  BRIDGE: 35,
+  POSTBOX: 36,
 } as const
 
-export const TILE_COUNT = 34
+export const TILE_COUNT = 37
 
 export const BLOCKING: number[] = [
   T.WALL_CREAM, T.WALL_YELLOW, T.WALL_LAV, T.WINDOW_CREAM, T.WINDOW_YELLOW, T.WINDOW_LAV, T.DOOR, T.ROOF, T.EAVE,
   T.TREE, T.WATER, T.FENCE, T.PLANTER, T.STOOL, T.TABLE, T.LANTERN_POST, T.BENCH, T.PETHOUSE, T.STAIRS,
-  T.CHALKBOARD, T.NOTICEBOARD, T.TREATBOX, T.AWNING, T.BIKE, T.SCOOTER_PARKED, T.STICKY_BOARD,
+  T.CHALKBOARD, T.NOTICEBOARD, T.TREATBOX, T.AWNING, T.BIKE, T.SCOOTER_PARKED, T.STICKY_BOARD, T.GATE_CLOSED, T.POSTBOX,
 ]
 
 function speckle(ctx: Ctx, ox: number, oy: number, color: string, seed: number, n: number) {
@@ -375,6 +378,30 @@ export function drawTileset(): HTMLCanvasElement {
     rect(ctx, o + (x as number), y as number, 4, 4, col as string),
   )
   rect(ctx, o + 7, 12, 2, 3, PAL.coffee)
+  // closed lantern gate (opens with a new chapter)
+  o = at(T.GATE_CLOSED)
+  rect(ctx, o, 0, 16, 16, PAL.pave)
+  rect(ctx, o + 1, 2, 2, 14, PAL.coffee)
+  rect(ctx, o + 13, 2, 2, 14, PAL.coffee)
+  rect(ctx, o + 1, 2, 14, 2, PAL.coffee)
+  for (let x = 4; x < 13; x += 3) rect(ctx, o + x, 5, 1, 11, PAL.coffeeLight)
+  rect(ctx, o + 3, 9, 10, 1, PAL.coffeeLight)
+  rect(ctx, o + 6, 6, 4, 5, PAL.amber)
+  rect(ctx, o + 7, 7, 2, 3, PAL.amberDark)
+  rect(ctx, o + 7, 0, 2, 2, PAL.coral)
+  // wooden bridge planks over the river
+  o = at(T.BRIDGE)
+  rect(ctx, o, 0, 16, 16, PAL.coffeeLight)
+  for (let y = 0; y < 16; y += 4) rect(ctx, o, y + 3, 16, 1, PAL.coffee)
+  rect(ctx, o, 0, 1, 16, PAL.coffee)
+  rect(ctx, o + 15, 0, 1, 16, PAL.coffee)
+  // little red postbox
+  o = at(T.POSTBOX)
+  rect(ctx, o, 0, 16, 16, PAL.pave)
+  rect(ctx, o + 4, 2, 8, 11, PAL.coral)
+  rect(ctx, o + 4, 2, 8, 2, PAL.coralDark)
+  rect(ctx, o + 5, 6, 6, 1, PAL.ink)
+  rect(ctx, o + 7, 13, 2, 3, PAL.ink)
   return c
 }
 

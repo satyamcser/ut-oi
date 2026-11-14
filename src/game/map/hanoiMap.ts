@@ -1,13 +1,14 @@
 // The little Hanoi street, painted tile by tile. Pure data (unit-tested): a
 // tile grid, a walkability grid, interactable spots and a few labels.
 import type { PieceId, Role, ZoneId } from '../../content/ids'
+import type { SceneId } from '../../content/moments'
 import { BLOCKING, T } from '../art/pixels'
 import type { Grid, Pt } from '../systems/movement'
 
 export const MAP_W = 46
-export const MAP_H = 30
+export const MAP_H = 56
 
-export type SpotKind = 'zone' | 'bell' | 'chalkboard' | 'cat' | 'koi' | 'notice' | 'piece' | 'simba' | 'questmap'
+export type SpotKind = 'zone' | 'bell' | 'chalkboard' | 'cat' | 'koi' | 'notice' | 'piece' | 'simba' | 'questmap' | 'gate' | 'place' | 'postbox'
 
 export interface SpotDef {
   id: string
@@ -17,6 +18,15 @@ export interface SpotDef {
   label: string
   zone?: ZoneId
   piece?: PieceId
+  chapter?: number // gates: the chapter that opens them
+  scene?: SceneId // places: the Our Little World scene they open
+}
+
+/** A lantern gate: closed until the shared chapter reaches `chapter`. */
+export interface GateDef {
+  chapter: number
+  x: number
+  y: number
 }
 
 export interface MapLabel {
@@ -32,6 +42,8 @@ export interface HanoiMap {
   labels: MapLabel[]
   lanternPosts: Pt[]
   hangingLanterns: Pt[] // tile coords (fractional allowed)
+  gardenLanterns: Pt[]
+  gates: GateDef[]
   start: Pt
   npcSpot: Record<Role, Pt>
   catSpot: Pt
@@ -132,6 +144,66 @@ export function buildHanoiMap(): HanoiMap {
   fill(27, 27, 15, 1, T.PAVE)
   fill(42, 17, 2, 4, T.TREE)
 
+  // ================= the south: opens chapter by chapter =================
+  const gates: GateDef[] = []
+  const gate = (x: number, y: number, chapter: number) => {
+    set(x, y, T.GATE_CLOSED)
+    gates.push({ chapter, x, y })
+  }
+
+  // hedge behind the park, with the chapter 2 gate
+  fill(1, 29, MAP_W - 2, 1, T.TREE)
+  set(23, 28, T.PAVE)
+  gate(23, 29, 2)
+
+  // ---- chapter 2: riverside promenade and a wooden bridge
+  fill(1, 30, MAP_W - 2, 2, T.PAVE)
+  for (const x of [6, 16, 38]) set(x, 30, T.LANTERN_POST)
+  set(31, 30, T.BENCH)
+  set(32, 30, T.BENCH)
+  fill(1, 32, MAP_W - 2, 4, T.WATER)
+  fill(22, 32, 3, 4, T.BRIDGE)
+  fill(1, 36, MAP_W - 2, 2, T.PAVE)
+  for (const x of [4, 28, 42]) set(x, 36, T.PLANTER)
+
+  // hedges around the three southern districts
+  fill(1, 38, MAP_W - 2, 1, T.TREE)
+  fill(15, 38, 1, MAP_H - 39, T.TREE)
+  fill(31, 38, 1, MAP_H - 39, T.TREE)
+
+  // ---- chapter 3: the rainy bookshop (west)
+  gate(8, 38, 3)
+  fill(1, 39, 14, 2, T.PAVE)
+  building(2, 11, T.WALL_CREAM, T.WINDOW_CREAM, 7, 41)
+  fill(13, 41, 1, 6, T.PAVE)
+  fill(1, 47, 14, 2, T.PAVE)
+  set(4, 48, T.BENCH)
+  set(10, 48, T.PLANTER)
+  for (const [x, y] of [[3, 51], [11, 52], [6, 53]]) set(x, y, T.TREE)
+  for (const [x, y] of [[8, 50], [2, 53], [13, 51], [9, 54]]) set(x, y, T.GRASS_FLOWER)
+
+  // ---- chapter 4: the lantern garden (middle)
+  gate(23, 38, 4)
+  fill(23, 39, 1, MAP_H - 40, T.PAVE)
+  fill(17, 46, 13, 1, T.PAVE)
+  fill(19, 42, 2, 2, T.WATER)
+  fill(26, 50, 2, 2, T.WATER)
+  for (const [x, y] of [[18, 40], [28, 40], [18, 52], [29, 53]]) set(x, y, T.LANTERN_POST)
+  set(25, 47, T.BENCH)
+  set(26, 47, T.BENCH)
+  for (let y = 39; y < MAP_H - 1; y++)
+    for (let x = 16; x < 31; x++) if (tiles[y][x] === T.GRASS && (x * 7 + y * 3) % 4 === 0) set(x, y, T.GRASS_FLOWER)
+
+  // ---- chapter 5: the postcard corner / Sky Gate (east)
+  gate(38, 38, 5)
+  fill(32, 39, 13, 2, T.PAVE)
+  building(33, 10, T.WALL_LAV, T.WINDOW_LAV, 38, 42)
+  fill(43, 41, 1, 7, T.PAVE)
+  fill(32, 48, 13, 2, T.PAVE)
+  set(35, 48, T.POSTBOX)
+  for (const [x, y] of [[34, 52], [42, 53]]) set(x, y, T.TREE)
+  for (const [x, y] of [[37, 51], [40, 52], [33, 54], [44, 51]]) set(x, y, T.GRASS_FLOWER)
+
   const walk: Grid = tiles.map((row) => row.map((id) => !BLOCKING.includes(id)))
 
   const spots: SpotDef[] = [
@@ -151,6 +223,12 @@ export function buildHanoiMap(): HanoiMap {
     { id: 'piece:courtyard', kind: 'piece', piece: 'piece_courtyard', tx: 7, ty: 24, label: 'Peek behind the treat box' },
     { id: 'piece:auditorium', kind: 'piece', piece: 'piece_auditorium', tx: 41, ty: 8, label: 'Pick up the paper corner' },
     { id: 'piece:rooftop', kind: 'piece', piece: 'piece_rooftop', tx: 41, ty: 26, label: 'Look in the plant pot' },
+    ...gates.map((g) => ({ id: `gate:${g.chapter}`, kind: 'gate' as const, chapter: g.chapter, tx: g.x, ty: g.y, label: 'A closed lantern gate' })),
+    { id: 'place:riverside', kind: 'place', scene: 'riverside', tx: 31, ty: 30, label: 'Sit by the river' },
+    { id: 'place:bookshop', kind: 'place', scene: 'bookshop', tx: 7, ty: 46, label: 'Step into the bookshop' },
+    { id: 'place:lanterns', kind: 'place', scene: 'lanterns', tx: 25, ty: 47, label: 'Sit under the lanterns' },
+    { id: 'place:airport', kind: 'place', scene: 'airport', tx: 38, ty: 47, label: 'Visit the Sky Gate' },
+    { id: 'postbox', kind: 'postbox', tx: 35, ty: 48, label: 'Post a postcard' },
   ]
 
   return {
@@ -164,6 +242,10 @@ export function buildHanoiMap(): HanoiMap {
       { text: 'PET BUREAU', tx: 10.5, ty: 16.4 },
       { text: 'ROOFTOP ↑', tx: 34.5, ty: 19.5 },
       { text: 'MAP', tx: 24.5, ty: 13.6 },
+      { text: 'RIVERSIDE', tx: 31.5, ty: 29.4 },
+      { text: 'RAINY BOOKSHOP', tx: 7.5, ty: 43.5 },
+      { text: 'LANTERN GARDEN', tx: 23.5, ty: 39.5 },
+      { text: 'SKY GATE', tx: 38, ty: 44.5 },
     ],
     lanternPosts: [
       { x: 14, y: 9 },
@@ -172,8 +254,17 @@ export function buildHanoiMap(): HanoiMap {
       { x: 6, y: 14 },
       { x: 18, y: 14 },
       { x: 38, y: 14 },
+      { x: 6, y: 30 },
+      { x: 16, y: 30 },
+      { x: 38, y: 30 },
+      { x: 18, y: 40 },
+      { x: 28, y: 40 },
+      { x: 18, y: 52 },
+      { x: 29, y: 53 },
     ],
     hangingLanterns: [3.5, 5.5, 7.5, 9.5, 11.5, 17.5, 19.5, 22.5, 24.5, 31.5, 34.5, 38.5, 41.5].map((x) => ({ x, y: 6.9 })),
+    gardenLanterns: [17.5, 19.5, 21.5, 23.5, 25.5, 27.5, 29.5].map((x, i) => ({ x, y: 43.9 + (i % 2) * 0.4 })),
+    gates,
     start: { x: 22, y: 15 },
     npcSpot: { ut: { x: 22, y: 8 }, satyam: { x: 37, y: 8 } },
     catSpot: { x: 6, y: 7 },

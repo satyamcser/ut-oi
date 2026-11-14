@@ -5,6 +5,7 @@ import { BACKGROUND_IDS_FOR_TEST, BADGE_IDS_FOR_TEST } from './helpers'
 import { EGG_IDS, GAME_IDS, MAX_SCORE, PIECE_IDS, REACTIONS, STICKERS, ZONES } from '../src/content/ids'
 import { buildQuiz, ENGLISH_ITEMS, GLOSSARY, QUIZ_LENGTH } from '../src/content/phrases'
 import { talkStatus } from '../src/content/dialogue'
+import { CHAPTERS, chapterFor, QUESTS, sharedMemories } from '../src/content/chapters'
 import { isExpired, MOMENT_TTL_MS, MOMENT_TYPES, MOMENTS, SCENE_IDS } from '../src/content/moments'
 import { BLOCKING, T } from '../src/game/art/pixels'
 import { buildMaze, hideClues, MAZE, MAZE_START, pawprintScore } from '../src/game/map/courtyardMaze'
@@ -53,8 +54,27 @@ describe('Hanoi street map', () => {
     m.tiles.forEach((row) => expect(row).toHaveLength(MAP_W))
     expect(m.walk[m.start.y][m.start.x]).toBe(true)
   })
-  it('every interactable can be reached from the start', () => {
-    const r = reachable(m.walk, m.start)
+  const openUpTo = (n: number) => {
+    const w = m.walk.map((row) => [...row])
+    for (const g of m.gates) if (g.chapter <= n) w[g.y][g.x] = true
+    return w
+  }
+  const canReach = (w: Grid, tx: number, ty: number) => {
+    const r = reachable(w, m.start)
+    return [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => r.has(`${tx + dx},${ty + dy}`))
+  }
+  it('every gate opens exactly one chapter, and each district stays closed until its chapter', () => {
+    expect(m.gates.map((g) => g.chapter).sort()).toEqual([2, 3, 4, 5])
+    for (const g of m.gates) expect(m.walk[g.y][g.x]).toBe(false)
+    const placeChapter: Record<string, number> = { 'place:riverside': 2, 'place:bookshop': 3, 'place:lanterns': 4, 'place:airport': 5, postbox: 5 }
+    for (const [id, ch] of Object.entries(placeChapter)) {
+      const sp = m.spots.find((x) => x.id === id)!
+      expect(canReach(openUpTo(ch - 1), sp.tx, sp.ty), `${id} locked before chapter ${ch}`).toBe(false)
+      expect(canReach(openUpTo(ch), sp.tx, sp.ty), `${id} open at chapter ${ch}`).toBe(true)
+    }
+  })
+  it('every interactable can be reached from the start once all gates are open', () => {
+    const r = reachable(openUpTo(99), m.start)
     for (const s of m.spots) {
       const stand = nearestWalkable(m.walk, { x: s.tx, y: s.ty })!
       const neighbours = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => `${s.tx + dx},${s.ty + dy}`)
@@ -197,6 +217,32 @@ describe('coffee points & talk noticeboard', () => {
   it('stops being “upcoming” after 14 Nov 2026 (no broken countdown)', () => {
     expect(talkStatus(new Date('2026-11-10T10:00:00+07:00'))).toMatch(/noticeboard/)
     expect(talkStatus(new Date('2026-11-20T10:00:00+07:00'))).toMatch(/memory/)
+  })
+})
+
+describe('chapters', () => {
+  it('only go up with shared memories, and never drop below what was reached', () => {
+    expect(chapterFor(0)).toBe(1)
+    expect(chapterFor(3)).toBe(2)
+    expect(chapterFor(24)).toBe(4)
+    expect(chapterFor(999)).toBe(CHAPTERS.length)
+    expect(chapterFor(0, 3)).toBe(3)
+    const needs = CHAPTERS.map((c) => c.needs)
+    expect([...needs].sort((a, b) => a - b)).toEqual(needs)
+  })
+  it('count everyone’s contributions together, ignoring orphan replies', () => {
+    const n = sharedMemories({
+      postcards: [{ id: 'p1' } as never, { id: 'p2' } as never],
+      replies: [{ postId: 'p1' } as never, { postId: 'gone' } as never],
+      moments: [{ status: 'accepted' } as never, { status: 'declined' } as never],
+      stories: [{ lines: [{}, {}, {}] } as never],
+    })
+    expect(n).toBe(2 + 1 + 2 + 3)
+  })
+  it('side quests never involve a romantic gesture', () => {
+    const src = QUESTS.map((q) => q.done.toString()).join('|')
+    expect(src).not.toMatch(/'(hand|hug|dance|kiss)'/)
+    for (const c of CHAPTERS) expect(QUESTS.filter((q) => q.chapter === c.n).length).toBeGreaterThan(0)
   })
 })
 

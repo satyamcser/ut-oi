@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { DISCLAIMER, ECHO_LINES, FOOTER, MISC, POEM, TALK, talkStatus, ZONE_BLURB } from '../content/dialogue'
 import { ZONES, type GameId, type ZoneId } from '../content/ids'
+import { CHAPTERS, QUESTS, type Chapter } from '../content/chapters'
 import { LETTER } from '../content/letter'
+import { SCORECARD } from '../content/moments'
 import { GLOSSARY } from '../content/phrases'
 import { friendlyError } from '../data/backend'
 import { useSettings } from '../hooks/useSettings'
@@ -9,15 +11,46 @@ import { useWorld } from '../hooks/useWorld'
 import { PetPortrait } from './Passport'
 import { Sheet, timeAgo } from './ui'
 
-export function QuestMap({ onClose, onGo }: { onClose: () => void; onGo: (z: ZoneId) => void }) {
-  const { me } = useWorld()
+export function QuestMap({
+  onClose,
+  onGo,
+  onPlace,
+  chapter,
+  memories,
+  next,
+}: {
+  onClose: () => void
+  onGo: (z: ZoneId) => void
+  onPlace: (spotId: string) => void
+  chapter: number
+  memories: number
+  next: Chapter | null
+}) {
+  const { me, user, postcards, replies, moments, stories } = useWorld()
+  if (!me || !user) return null
+  const ctx = { me, uid: user.uid, postcards, replies, moments, stories }
+  const prevNeeds = CHAPTERS.find((c) => c.n === chapter)?.needs ?? 0
+  const pct = next ? Math.min(100, Math.round(((memories - prevNeeds) / Math.max(1, next.needs - prevNeeds)) * 100)) : 100
   return (
     <Sheet title="Side Quest Map" onClose={onClose}>
-      <p className="fine">Every place is open from the start. Wander in any order — or not at all.</p>
+      <div className="chapter-card">
+        <p className="eyebrow">Chapter {chapter} of {CHAPTERS.length}</p>
+        <strong>{CHAPTERS.find((c) => c.n === chapter)?.title}</strong>
+        <div className="chapter-bar" role="meter" aria-label="Shared memories toward the next chapter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+          <div style={{ width: `${pct}%` }} />
+        </div>
+        <small>
+          {memories} shared {memories === 1 ? 'memory' : 'memories'}
+          {next ? ` · ${next.needs - memories > 0 ? next.needs - memories : 0} more opens “${next.title}”` : ' · every gate is open ✨'}
+        </small>
+        <small className="fine">Postcards, replies, moments you both said yes to and story lines all count — for both of you together. Chapters never go back.</small>
+      </div>
+
+      <h3>The little street</h3>
       <ol className="quest-list">
         {ZONES.map((z) => {
-          const visited = me?.visited.includes(z.id)
-          const piece = me?.pieces.includes(`piece_${z.id}` as never)
+          const visited = me.visited.includes(z.id)
+          const piece = me.pieces.includes(`piece_${z.id}` as never)
           return (
             <li key={z.id}>
               <button className="quest" onClick={() => onGo(z.id)}>
@@ -36,6 +69,41 @@ export function QuestMap({ onClose, onGo }: { onClose: () => void; onGo: (z: Zon
           )
         })}
       </ol>
+
+      {CHAPTERS.map((c) => {
+        const open = c.n <= chapter
+        const quests = QUESTS.filter((q) => q.chapter === c.n)
+        return (
+          <section key={c.n} className={`chapter-section ${open ? '' : 'locked'}`}>
+            <h3>
+              {open ? '' : '🔒 '}Chapter {c.n}: {c.title}
+            </h3>
+            <p className="fine">
+              {c.blurb} {open ? '' : `Opens at ${c.needs} shared memories.`}
+            </p>
+            {open && c.scene && (
+              <button className="btn btn-small" onClick={() => onPlace(`place:${c.scene}`)}>
+                Walk there →
+              </button>
+            )}
+            <ul className="side-quests">
+              {quests.map((q) => {
+                const done = open && q.done(ctx)
+                return (
+                  <li key={q.id} className={done ? 'done' : ''}>
+                    <span aria-hidden="true">{done ? '✅' : open ? '◻️' : '·'}</span>
+                    <span>
+                      <strong>{q.title}</strong>
+                      <small>{q.hint}</small>
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
+      <p className="fine">Side quests are optional and nobody keeps score. Skip any of them.</p>
     </Sheet>
   )
 }
@@ -133,6 +201,7 @@ export function ZonePanel({
                 Visit event page
               </a>
             </div>
+            <Scorecard />
           </>
         )}
         {zone === 'rooftop' && (
@@ -187,6 +256,64 @@ export function ZonePanel({
         )}
       </div>
     </Sheet>
+  )
+}
+
+/** A joke scorecard for each other — never academic, never about English. Sent as a postcard. */
+function Scorecard() {
+  const { backend, user, role, partner } = useWorld()
+  const { toast, play } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [picks, setPicks] = useState<string[]>(() => SCORECARD.map((c) => c.options[0]))
+  const [busy, setBusy] = useState(false)
+  if (!user || !role) return null
+  const partnerName = partner?.displayName ?? (role === 'ut' ? 'Satyam' : 'Út')
+  if (!open)
+    return (
+      <button className="btn" onClick={() => setOpen(true)}>
+        📋 Fill in an unofficial scorecard for {partnerName}
+      </button>
+    )
+  const text = `📋 Unofficial scorecard for ${partnerName}\n${SCORECARD.map((c, i) => `${c.label}: ${picks[i]}`).join('\n')}`
+  return (
+    <div className="pinned">
+      <strong>📋 Unofficial scorecard for {partnerName}</strong>
+      <span className="fine">Strictly non-academic. Results are final and legally meaningless.</span>
+      {SCORECARD.map((c, i) => (
+        <div key={c.label} className="row">
+          <span className="by">{c.label}:</span>
+          {c.options.map((o) => (
+            <button key={o} className={`chip ${picks[i] === o ? 'on' : ''}`} aria-pressed={picks[i] === o} onClick={() => setPicks(picks.map((p, j) => (j === i ? o : p)))}>
+              {o}
+            </button>
+          ))}
+        </div>
+      ))}
+      <div className="row">
+        <button
+          className="btn btn-primary btn-small"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await backend.addPostcard(user.uid, { kind: 'postcard', backgroundId: 'lanterns', text, stickerIds: ['laugh'] })
+              play('paper')
+              toast('Scorecard pinned to the shared album.', 'good')
+              setOpen(false)
+            } catch (e) {
+              toast(`Not sent: ${friendlyError(e)}`, 'error')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          Pin it to the album
+        </button>
+        <button className="btn btn-small btn-ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -328,9 +455,9 @@ export function SettingsPanel({
 
       <h3>Your data</h3>
       <ul className="controls">
-        <li>Saved for both of you to see: avatar, best scores, shared postcards, replies, reactions, questions, challenges and Our Little World invitations.</li>
+        <li>Saved for both of you to see: avatar, best scores, shared postcards, replies, reactions, questions, challenges, Our Little World invitations, stories, the café board, and any photo stories you choose to share (resized on your device, location data removed).</li>
         <li>Saved only on this device: sound/motion settings and “just for me” postcards.</li>
-        <li>Never collected: photos, location, contacts, camera, microphone, online status or visit times.</li>
+        <li>Never collected automatically: location, contacts, camera, microphone, online status or visit times.</li>
         <li>
           Connection:{' '}
           {sync.kind === 'demo' ? 'demo — nothing leaves this tab' : sync.kind === 'offline' ? 'offline — changes wait until you’re back' : `online · last synced ${timeAgo(sync.lastSynced)}`}

@@ -1,12 +1,12 @@
 import Phaser from 'phaser'
 import type { PieceId, Role, ZoneId } from '../../content/ids'
 import type { AvatarConfig } from '../../models/types'
-import { BLOCKING } from '../art/pixels'
+import { BLOCKING, T } from '../art/pixels'
 import { bus } from '../bus'
 import { buildHanoiMap, type HanoiMap, type SpotDef } from '../map/hanoiMap'
 import { nearestSpot, type Pt } from '../systems/movement'
 import { Walker, zoomFor } from '../systems/walker'
-import { ensureBaseTextures, setAvatarTexture } from '../textures'
+import { ensureBaseTextures, IDLE_FRAME, setAvatarTexture, WALK_ANIM } from '../textures'
 
 export interface OverworldData {
   avatar: AvatarConfig
@@ -15,6 +15,7 @@ export interface OverworldData {
   pieces: PieceId[]
   reduced: boolean
   firstVisit: boolean
+  chapter: number
 }
 
 interface LiveSpot {
@@ -45,6 +46,13 @@ export class HanoiOverworld extends Phaser.Scene {
   private guide: Phaser.GameObjects.Container | null = null
   private offs: (() => void)[] = []
   private initData!: OverworldData
+  private layer!: Phaser.Tilemaps.TilemapLayer
+  private openChapters = new Set<number>()
+  private shadows = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Ellipse>()
+  private otherRole: Role | null = null
+  private live = false
+  private lastEmoteAt = 0
+  private lastPos = { x: 0, y: 0, dir: -1, at: 0 }
 
   constructor() {
     super('overworld')
@@ -66,6 +74,7 @@ export class HanoiOverworld extends Phaser.Scene {
     const tileset = tilemap.addTilesetImage('tiles', 'tiles', 16, 16, 0, 0)!
     const layer = tilemap.createLayer(0, tileset, 0, 0)!
     layer.setCollision(BLOCKING)
+    this.layer = layer
     const W = m.tiles[0].length * 16
     const H = m.tiles.length * 16
     this.physics.world.setBounds(0, 0, W, H)
@@ -92,6 +101,24 @@ export class HanoiOverworld extends Phaser.Scene {
     g.moveTo(m.hangingLanterns[0].x * 16 - 8, 6.6 * 16)
     m.hangingLanterns.forEach((p) => g.lineTo(p.x * 16, p.y * 16 - 3))
     g.strokePath()
+    // garden lanterns on their own string
+    for (const p of m.gardenLanterns) {
+      const lan = this.add.image(p.x * 16, p.y * 16, 'hlantern').setDepth(4100)
+      const glow = this.add.image(p.x * 16, p.y * 16 + 6, 'glow').setDepth(4000).setScale(0.8).setBlendMode(Phaser.BlendModes.ADD)
+      if (!this.reduced) {
+        this.tweens.add({ targets: lan, angle: { from: -6, to: 6 }, duration: 1800 + Math.random() * 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+        this.tweens.add({ targets: glow, alpha: { from: 0.5, to: 1 }, duration: 1600 + Math.random() * 900, yoyo: true, repeat: -1 })
+      }
+    }
+    const g2 = this.add.graphics().setDepth(4050)
+    g2.lineStyle(1, 0x2b2230, 0.6)
+    g2.beginPath()
+    g2.moveTo(m.gardenLanterns[0].x * 16 - 8, m.gardenLanterns[0].y * 16 - 3)
+    m.gardenLanterns.forEach((p) => g2.lineTo(p.x * 16, p.y * 16 - 3))
+    g2.strokePath()
+    // a soft evening wash over the river district for depth
+    const W0 = m.tiles[0].length * 16
+    this.add.rectangle(W0 / 2, 33.5 * 16 + 8, W0, 4 * 16, 0xf6d49a, 0.12).setDepth(6).setBlendMode(Phaser.BlendModes.ADD)
 
     // Spots
     this.spots = m.spots.map((s) => ({ ...s, x: s.tx * 16 + 8, y: s.ty * 16 + 8 }))
@@ -127,6 +154,10 @@ export class HanoiOverworld extends Phaser.Scene {
     this.physics.add.collider(this.walker.sprite, layer)
     this.walker.facing = 1
     this.hideFoundPieces(d.pieces)
+    this.openGates(d.chapter, false)
+    this.addShadow(this.walker.sprite)
+    this.addShadow(this.simba)
+    if (this.other) this.addShadow(this.other)
 
     // Camera
     const cam = this.cameras.main
@@ -177,6 +208,13 @@ export class HanoiOverworld extends Phaser.Scene {
         if (o) this.placeOther(o.cfg, o.role)
       }),
       bus.on('pieces', (p) => this.hideFoundPieces(p)),
+      bus.on('chapter', (n) => this.openGates(n, true)),
+      bus.on('presence', (p) => this.showPresence(p)),
+      bus.on('emote', (e) => this.floatText(this.walker.sprite.x, this.walker.sprite.y - 30, e)),
+      bus.on('gotoSpot', (id) => {
+        const s = this.spots.find((x) => x.id === id)
+        if (s) this.walker.walkTo({ x: s.tx, y: s.ty }, () => this.interact(s.id))
+      }),
       bus.on('goto', (zone: ZoneId) => {
         const s = this.spots.find((x) => x.zone === zone)
         if (s) this.walker.walkTo({ x: s.tx, y: s.ty }, () => this.interact(s.id))
@@ -217,6 +255,51 @@ export class HanoiOverworld extends Phaser.Scene {
       k.y += (py - k.y) * 0.12
     }
     this.simba.setDepth(this.simba.y)
+    if (this.other) this.other.setDepth(this.other.y)
+    // share my position (the React side decides whether it's actually sent)
+    if (this.time.now - this.lastPos.at > 300) {
+      const x = Math.round(p.x)
+      const y = Math.round(p.y)
+      if (x !== this.lastPos.x || y !== this.lastPos.y || this.walker.facing !== this.lastPos.dir) {
+        this.lastPos = { x, y, dir: this.walker.facing, at: this.time.now }
+        bus.emit('myPos', { x, y, dir: this.walker.facing })
+      }
+    }
+    for (const [sp, sh] of this.shadows) {
+      if (!sp.active) continue
+      sh.setPosition(sp.x, sp.y - 1).setVisible(sp.visible)
+    }
+  }
+
+  /** Soft ground shadow: a little depth under everything that walks. */
+  private addShadow(sp: Phaser.GameObjects.Sprite) {
+    const sh = this.add.ellipse(sp.x, sp.y, 12, 4, 0x2b2230, 0.28).setDepth(4)
+    this.shadows.set(sp, sh)
+    sp.once('destroy', () => {
+      sh.destroy()
+      this.shadows.delete(sp)
+    })
+  }
+
+  /** Opens every lantern gate up to chapter n. Gates never close again. */
+  private openGates(n: number, celebrate: boolean) {
+    for (const gd of this.map.gates) {
+      if (gd.chapter > n || this.openChapters.has(gd.chapter)) continue
+      this.openChapters.add(gd.chapter)
+      this.layer.putTileAt(T.PAVE, gd.x, gd.y)
+      this.map.walk[gd.y][gd.x] = true
+      if (celebrate) {
+        const x = gd.x * 16 + 8
+        const y = gd.y * 16 + 8
+        const glow = this.add.image(x, y, 'glow').setDepth(6000).setScale(2).setBlendMode(Phaser.BlendModes.ADD)
+        this.tweens.add({ targets: glow, alpha: 0, scale: 3, duration: this.reduced ? 400 : 1800, onComplete: () => glow.destroy() })
+        for (let i = 0; i < 6 && !this.reduced; i++) {
+          const sp = this.add.sprite(x, y, 'sparkle', 0).setDepth(6001)
+          this.tweens.add({ targets: sp, x: x + Phaser.Math.Between(-24, 24), y: y - Phaser.Math.Between(8, 30), alpha: 0, duration: 1400, onComplete: () => sp.destroy() })
+        }
+        this.floatText(x, y - 8, 'A gate opened!')
+      }
+    }
   }
 
   // ---------------------------------------------------------------- helpers
@@ -224,8 +307,10 @@ export class HanoiOverworld extends Phaser.Scene {
   private liveSpots(): LiveSpot[] {
     const list: LiveSpot[] = this.spots
       .filter((s) => s.kind !== 'piece' || this.sparkles.get(s.piece!)?.visible)
+      .filter((s) => s.kind !== 'gate' || !this.openChapters.has(s.chapter!))
       .map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, r: REACH }))
     list.push({ id: 'simba', label: 'Pet Simba', x: this.simba.x, y: this.simba.y - 6, r: REACH })
+    if (this.live && this.other) list.push({ id: 'other', label: 'Wave 👋', x: this.other.x, y: this.other.y - 8, r: REACH })
     return list
   }
 
@@ -256,7 +341,7 @@ export class HanoiOverworld extends Phaser.Scene {
 
   private floatText(x: number, y: number, text: string) {
     const t = this.add
-      .text(x, y, text, { fontFamily: 'Tiny5, monospace', fontSize: '16px', color: '#EAA84C', stroke: '#2B2230', strokeThickness: 4 })
+      .text(x, y, text, { fontFamily: /^[ -~]+$/.test(text) ? 'Tiny5, monospace' : 'system-ui, sans-serif', fontSize: '16px', color: '#EAA84C', stroke: '#2B2230', strokeThickness: 4 })
       .setOrigin(0.5)
       .setScale(0.5)
       .setResolution(3)
@@ -264,11 +349,58 @@ export class HanoiOverworld extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 14, alpha: 0, duration: this.reduced ? 600 : 1100, onComplete: () => t.destroy() })
   }
 
+  /** The other player, walking live (when you both share) or resting near their building. */
+  private showPresence(p: { x: number; y: number; dir: number; emote: string; emoteAt: number } | null) {
+    const o = this.other
+    if (!o || !this.otherRole) return
+    if (!p) {
+      if (this.live) {
+        this.live = false
+        this.tweens.killTweensOf(o)
+        o.anims.stop()
+        const s = this.map.npcSpot[this.otherRole]
+        o.setPosition(s.x * 16 + 8, s.y * 16 + 12).setFrame(0).setFlipX(false)
+        if (!this.reduced) this.tweens.add({ targets: o, y: o.y - 1, duration: 900, yoyo: true, repeat: -1 })
+      }
+      return
+    }
+    if (!this.live) {
+      this.live = true
+      this.tweens.killTweensOf(o)
+      o.setPosition(p.x, p.y)
+    }
+    const dir = Math.max(0, Math.min(3, p.dir))
+    const dist = Phaser.Math.Distance.Between(o.x, o.y, p.x, p.y)
+    o.setFlipX(dir === 3)
+    if (dist > 1.5) {
+      this.tweens.killTweensOf(o)
+      o.play(`other-${WALK_ANIM[dir]}`, true)
+      this.tweens.add({
+        targets: o,
+        x: p.x,
+        y: p.y,
+        duration: Math.min(900, dist * 14),
+        onComplete: () => {
+          o.anims.stop()
+          o.setFrame(IDLE_FRAME[dir])
+        },
+      })
+    } else o.setFrame(IDLE_FRAME[dir])
+    if (p.emote && p.emoteAt !== this.lastEmoteAt) {
+      const fresh = Date.now() - p.emoteAt < 20000
+      this.lastEmoteAt = p.emoteAt
+      if (fresh) this.floatText(o.x, o.y - 30, p.emote)
+    }
+  }
+
   private placeOther(cfg: AvatarConfig, role: Role) {
+    this.otherRole = role
+    this.live = false
     setAvatarTexture(this, 'other', cfg, role)
     const s = this.map.npcSpot[role]
     this.other = this.add.sprite(s.x * 16 + 8, s.y * 16 + 12, 'other', 0).setOrigin(0.5, 1).setDepth(s.y * 16 + 12)
     if (!this.reduced) this.tweens.add({ targets: this.other, y: this.other.y - 1, duration: 900, yoyo: true, repeat: -1 })
+    if (this.walker) this.addShadow(this.other)
   }
 
   private hideFoundPieces(found: PieceId[]) {

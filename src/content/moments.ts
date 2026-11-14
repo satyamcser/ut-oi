@@ -5,13 +5,15 @@
 // in firestore.rules (a unit test checks).
 import type { Role } from './ids'
 
-export type SceneId = 'riverside' | 'cafe' | 'lanterns'
-export type MomentType = 'walk' | 'sunset' | 'talk' | 'tease' | 'comfort' | 'hand' | 'hug' | 'dance' | 'kiss'
+export type SceneId = 'riverside' | 'cafe' | 'lanterns' | 'bookshop' | 'airport'
+export type MomentType = 'walk' | 'sunset' | 'talk' | 'tease' | 'comfort' | 'poem' | 'thinking' | 'hand' | 'hug' | 'dance' | 'kiss'
 
 export const SCENES: { id: SceneId; name: string; glyph: string; blurb: string }[] = [
   { id: 'riverside', name: 'Riverside walk', glyph: '🌅', blurb: 'A slow path by the water. The sky is doing something nice again.' },
   { id: 'cafe', name: 'Moonlit café', glyph: '☕', blurb: 'Two stools, warm lights, and a vegetarian menu that is still “in negotiation”.' },
   { id: 'lanterns', name: 'Lantern garden', glyph: '🏮', blurb: 'Paper lanterns, flowers, fireflies. Simba is somewhere nearby. Probably.' },
+  { id: 'bookshop', name: 'Rainy bookshop', glyph: '📚', blurb: 'Rain on the window, old books, one very comfortable window seat.' },
+  { id: 'airport', name: 'Postcard corner', glyph: '✈️', blurb: 'Two cities, one sky. A little plane goes by now and then.' },
 ]
 
 export interface Variant {
@@ -66,7 +68,7 @@ export const MOMENTS: MomentDef[] = [
   },
   {
     type: 'talk',
-    scenes: ['cafe'],
+    scenes: ['cafe', 'bookshop'],
     romantic: false,
     label: 'Sit and talk',
     ask: 'Sit with me? Tell me one small thing about your day.',
@@ -98,7 +100,7 @@ export const MOMENTS: MomentDef[] = [
   },
   {
     type: 'comfort',
-    scenes: ['cafe', 'riverside'],
+    scenes: ['cafe', 'riverside', 'bookshop', 'airport'],
     romantic: false,
     label: 'Long day?',
     ask: 'Long day? I’m here if you want company.',
@@ -117,6 +119,30 @@ export const MOMENTS: MomentDef[] = [
     replyPrompt: 'Anything you want to say (optional)',
   },
   {
+    type: 'poem',
+    scenes: ['bookshop'],
+    romantic: false,
+    label: 'Share a line',
+    ask: 'Found this line in an old book and thought of you.',
+    variants: YES,
+    decline: 'Maybe another time',
+    declined: 'The book will stay on the shelf for later.',
+    caption: { yes: 'Rain, old pages, and one good line.' },
+    replyPrompt: 'A line back (optional)',
+  },
+  {
+    type: 'thinking',
+    scenes: ['airport'],
+    romantic: false,
+    label: 'Thinking of you',
+    ask: 'Different cities, same sky. Thinking of you from here.',
+    variants: [{ id: 'yes', label: 'Thinking of you too' }],
+    decline: 'Just wave back',
+    declined: 'A wave from far away. Received.',
+    caption: { yes: 'Far apart, under the same sky.' },
+    replyPrompt: 'A few words back (optional)',
+  },
+  {
     type: 'hand',
     scenes: ['riverside', 'lanterns'],
     romantic: true,
@@ -129,7 +155,7 @@ export const MOMENTS: MomentDef[] = [
   },
   {
     type: 'hug',
-    scenes: ['riverside', 'cafe', 'lanterns'],
+    scenes: ['riverside', 'cafe', 'lanterns', 'bookshop', 'airport'],
     romantic: true,
     label: 'Ask for a hug',
     ask: 'Can I hug you?',
@@ -212,3 +238,53 @@ export const LITTLE_WORLD_INTRO = [
   'Some invitations are romantic (hand, hug, dance, kiss). You can switch those off anytime in Settings.',
   'It’s a game: a click here is not a promise or a decision about anything in real life.',
 ]
+
+// ------------------------------------------------------------------ little extras
+
+/** Cozy questions. Never a relationship interrogation. */
+export const JAR_QUESTIONS = [
+  'What was one good thing today?',
+  'A quiet walk or a noisy market?',
+  'What made you smile today?',
+  'What would our imaginary café serve first?',
+  'Sunrise or sunset?',
+  'Which food could you eat every day?',
+  'A song stuck in your head right now?',
+  'Rainy day plan: book, film, or nap?',
+  'A place you want to see one day?',
+  'Your most dramatic pet opinion?',
+  'Tea, coffee, or “depends on the weather”?',
+  'A small thing that always makes a day better?',
+  'Mountains or the sea?',
+  'What did you eat today? Please rate it.',
+  'One word for this week?',
+  'Something you learned recently, big or small?',
+]
+
+export type StoryMode = 'funny' | 'cozy' | 'poetic'
+export const STORY_MODES: { id: StoryMode; label: string; starter: string }[] = [
+  { id: 'funny', label: '😂 Funny', starter: 'Simba walked into the café and ordered…' },
+  { id: 'cozy', label: '☕ Cozy', starter: 'It started raining, so we found a little bookshop…' },
+  { id: 'poetic', label: '🌙 Poetic', starter: 'The river kept a secret for the moon…' },
+]
+export const STORY_LIMITS = { line: 140, lines: 30 }
+
+export type CafeColor = 'rose' | 'lilac' | 'jasmine' | 'amber' | 'evening'
+export const CAFE_COLORS: { id: CafeColor; name: string; bg: string; ink: string }[] = [
+  { id: 'rose', name: 'Dusty rose', bg: '#DA887C', ink: '#2B2230' },
+  { id: 'lilac', name: 'Lilac', bg: '#B7A9CC', ink: '#2B2230' },
+  { id: 'jasmine', name: 'Jasmine green', bg: '#779A7A', ink: '#FFFAF0' },
+  { id: 'amber', name: 'Lantern amber', bg: '#EAA84C', ink: '#2B2230' },
+  { id: 'evening', name: 'Moonlit navy', bg: '#323E64', ink: '#F9F1DF' },
+]
+export const CAFE_LIMITS = { name: 40, tagline: 80, dish: 40, dishes: 6 }
+
+/** A joke scorecard: never academic, never about English. */
+export const SCORECARD: { label: string; options: string[] }[] = [
+  { label: 'Smile', options: ['Excellent', 'Suspiciously excellent', 'Blinding, please tone it down'] },
+  { label: 'Jokes', options: ['Questionable', 'Under review', 'Surprisingly okay'] },
+  { label: 'Punctuality', options: ['Legendary', 'Flexible', 'Vietnamese time'] },
+  { label: 'Final note', options: ['Must eat dinner', 'Must drink water', 'Must sleep early'] },
+]
+
+export const PHOTO_LIMITS = { caption: 300, maxChars: 900_000, maxSide: 1280 }
