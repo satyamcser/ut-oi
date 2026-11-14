@@ -9,7 +9,7 @@ export const GAME_IDS: GameId[] = ['matcha', 'language', 'pawprints', 'presentat
 export const MAX_SCORE: Record<GameId, number> = { matcha: 100, language: 96, pawprints: 60, presentation: 100 }
 export const GAME_TITLE: Record<GameId, string> = {
   matcha: 'Matcha Mission',
-  language: 'Language Exchange Duel',
+  language: 'Phrase Flashcards',
   pawprints: 'Find the Missing Pawprints',
   presentation: 'Presentation Rescue',
 }
@@ -75,9 +75,9 @@ export type BadgeId =
   | 'paper_airplane_pilot'
 
 export const BADGES: { id: BadgeId; title: string; how: string; stamp: string }[] = [
-  { id: 'professor_of_oi', title: 'Certified Professor of “Ơi”', how: 'Finish a Vietnamese → English quiz', stamp: 'ƠI' },
-  { id: 'tutor_under_investigation', title: 'English Tutor (Under Investigation)', how: 'Finish an English → Vietnamese quiz', stamp: 'ENG' },
-  { id: 'coffee_funded_diploma', title: 'Coffee-Funded Diploma', how: 'Score 80+ in the Language Duel', stamp: '80+' },
+  { id: 'professor_of_oi', title: 'Certified Professor of “Ơi”', how: 'Flip a round of Vietnamese → English flashcards', stamp: 'ƠI' },
+  { id: 'tutor_under_investigation', title: 'English Tutor (Under Investigation)', how: 'Flip a round of English → Vietnamese flashcards', stamp: 'ENG' },
+  { id: 'coffee_funded_diploma', title: 'Coffee-Funded Diploma', how: 'Match most of a flashcard round', stamp: '☕☕' },
   { id: 'chief_coffee_inspector', title: 'Chief Coffee Inspector’s Approval', how: 'Score 80+ in Matcha Mission', stamp: '☕' },
   { id: 'cat_union_rep', title: 'Cat Union Representative', how: 'Close a pawprint investigation', stamp: '🐾' },
   { id: 'certified_cat_inspector', title: 'Certified Cat Inspector', how: 'Get a reaction from Sleepy Cat', stamp: 'CAT' },
@@ -121,7 +121,8 @@ export const STICKERS: { id: StickerId; label: string; glyph: string }[] = [
   { id: 'plane', label: 'Paper airplane', glyph: '✈️' },
 ]
 
-export const REACTIONS = ['☕', '🐾', '🌙', '😂', '✨'] as const
+// 🌸 and 💛 are small, friendly reactions — never a confession.
+export const REACTIONS = ['☕', '🐾', '🌙', '😂', '✨', '🌸', '💛'] as const
 export type Reaction = (typeof REACTIONS)[number]
 
 export const ARTIFACT_FOR: Record<Role, 'simba_ball' | 'cat_bell'> = { satyam: 'simba_ball', ut: 'cat_bell' }

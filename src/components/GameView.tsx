@@ -16,6 +16,7 @@ import { PresentationRescue } from './games/PresentationRescue'
 import { SaveLine, useScoreSave } from './games/GameFrame'
 import { EndingView, LetterView, QuestMap, SettingsPanel, ZonePanel } from './Panels'
 import { Passport } from './Passport'
+import { LittleWorld, useMomentNews } from './LittleWorld'
 import { PostcardStudio } from './PostcardStudio'
 import { Sheet, Stamp, timeAgo } from './ui'
 
@@ -23,7 +24,8 @@ type Overlay =
   | { k: 'zone'; zone: ZoneId }
   | { k: 'game'; game: Exclude<GameId, 'language' | 'pawprints'> }
   | { k: 'academy' }
-  | { k: 'studio'; tab: 'compose' | 'album' }
+  | { k: 'studio'; tab: 'compose' | 'album' | 'moments' }
+  | { k: 'world' }
   | { k: 'passport' }
   | { k: 'settings' }
   | { k: 'map' }
@@ -49,6 +51,7 @@ export function GameView() {
   const [paw, setPaw] = useState<{ found: number; seconds: number; artifact: boolean; ended: boolean; quit: boolean }>({ found: 0, seconds: 75, artifact: false, ended: false, quit: false })
   const [avatarBusy, setAvatarBusy] = useState(false)
   const pawSave = useScoreSave('pawprints')
+  const news = useMomentNews()
   const bellCount = useRef(0)
   const catLine = useRef(0)
   const simbaLine = useRef(0)
@@ -258,6 +261,9 @@ export function GameView() {
           {sync.kind === 'demo' ? 'DEMO · not saved' : sync.kind === 'offline' ? 'Offline · not syncing' : `Synced ${timeAgo(sync.lastSynced)}`}
         </span>
         <span className="hud-actions" hidden={overlay?.k === 'paw'}>
+          <button className="hud-btn hud-world" onClick={() => setOverlay({ k: 'world' })} aria-label={news.count ? 'Our little world — something is waiting for you' : 'Our little world'}>
+            💞{news.count > 0 && <span className="hud-dot" aria-hidden="true" />}
+          </button>
           <button className="hud-btn" onClick={() => setOverlay({ k: 'map' })} aria-label="Side quest map">
             🗺
           </button>
@@ -273,6 +279,11 @@ export function GameView() {
       {letterReady && !paused && (
         <button className="letter-flag" onClick={() => void updateMe({ letterSeen: true }).finally(() => setOverlay({ k: 'letter' }))}>
           ✉ A folded letter appeared
+        </button>
+      )}
+      {!letterReady && news.count > 0 && !paused && (
+        <button className="letter-flag note-flag" onClick={() => setOverlay({ k: 'world' })}>
+          💌 There’s something for you in Our Little World
         </button>
       )}
       {showTutorial && !paused && ready && (
@@ -363,6 +374,7 @@ export function GameView() {
           onPlay={(g) => setOverlay({ k: 'game', game: g as 'matcha' | 'presentation' })}
           onStudio={() => setOverlay({ k: 'studio', tab: 'compose' })}
           onAlbum={() => setOverlay({ k: 'studio', tab: 'album' })}
+          onWorld={() => setOverlay({ k: 'world' })}
           onAcademy={() => setOverlay({ k: 'academy' })}
           onPawprints={startPawprints}
           onLetter={() => void updateMe({ letterSeen: true }).finally(() => setOverlay({ k: 'letter' }))}
@@ -388,6 +400,7 @@ export function GameView() {
         />
       )}
       {overlay?.k === 'studio' && <PostcardStudio startTab={overlay.tab} onClose={() => setOverlay(null)} />}
+      {overlay?.k === 'world' && <LittleWorld onClose={() => setOverlay(null)} onSettings={() => setOverlay({ k: 'settings' })} />}
       {overlay?.k === 'passport' && (
         <Passport
           onClose={() => setOverlay(null)}

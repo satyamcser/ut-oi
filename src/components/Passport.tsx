@@ -134,7 +134,8 @@ export function Passport({ onClose, onOpenEnding, onPlay }: { onClose: () => voi
       })}
       {partnerUid ? (
         <div className="challenge-make">
-          {GAME_IDS.filter((g) => best(user.uid, g)).map((g) => (
+          {/* No "beat my score" on phrase flashcards: language is never a contest here. */}
+          {GAME_IDS.filter((g) => g !== 'language' && best(user.uid, g)).map((g) => (
             <button
               key={g}
               className="btn btn-small"

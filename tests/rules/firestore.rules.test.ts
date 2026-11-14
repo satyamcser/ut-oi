@@ -208,3 +208,92 @@ describe('shared world', () => {
     await assertFails(deleteDoc(asSatyam))
   })
 })
+
+const moment = (fromUid: string, toUid: string, extra: Record<string, unknown> = {}) => ({
+  fromUid,
+  toUid,
+  type: 'walk',
+  scene: 'riverside',
+  line: 'Walk with me for a while?',
+  status: 'pending',
+  variant: '',
+  reply: '',
+  saved: {},
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+  ...extra,
+})
+
+describe('moments (invitations)', () => {
+  it('are sent only to the other player, start pending, and carry nothing pre-filled', async () => {
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'm0'), moment(SATYAM, SATYAM)))
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'm0'), moment(UT, SATYAM)))
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'm0'), moment(SATYAM, UT, { status: 'accepted', variant: 'yes' })))
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'm0'), moment(SATYAM, UT, { saved: { [SATYAM]: true } })))
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'm0'), moment(SATYAM, UT, { type: 'propose' })))
+    await assertFails(setDoc(doc(db(STRANGER), 'moments', 'm0'), moment(STRANGER, UT)))
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'moments', 'm1'), moment(SATYAM, UT)))
+  })
+
+  it('only the invited person answers, once, with an allowed choice; a no carries nothing', async () => {
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'moments', 'm1'), moment(SATYAM, UT, { type: 'dance', scene: 'lanterns' })))
+    const asSatyam = doc(db(SATYAM), 'moments', 'm1')
+    const asUt = doc(db(UT), 'moments', 'm1')
+    await assertFails(updateDoc(asSatyam, { status: 'accepted', variant: 'slow', reply: '', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(asUt, { status: 'accepted', variant: 'gentle', reply: '', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(asUt, { status: 'declined', variant: '', reply: 'sneaky', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(asUt, { status: 'accepted', variant: 'slow', reply: '', line: 'rewritten', updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(asUt, { status: 'accepted', variant: 'silly', reply: 'Merciful? Never.', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(asUt, { status: 'declined', variant: '', reply: '', updatedAt: serverTimestamp() }))
+  })
+
+  it('cannot be answered after a week', async () => {
+    await seed('moments/old', { ...moment(SATYAM, UT), createdAt: Timestamp.fromMillis(Date.now() - 8 * 86400000), updatedAt: Timestamp.now() })
+    await assertFails(updateDoc(doc(db(UT), 'moments', 'old'), { status: 'accepted', variant: 'yes', reply: '', updatedAt: serverTimestamp() }))
+    await assertSucceeds(deleteDoc(doc(db(SATYAM), 'moments', 'old')))
+  })
+
+  it('each person keeps a moment only for themselves; kept moments can’t be deleted', async () => {
+    await seed('moments/m1', { ...moment(SATYAM, UT), status: 'accepted', variant: 'yes', createdAt: Timestamp.now(), updatedAt: Timestamp.now() })
+    await assertFails(updateDoc(doc(db(SATYAM), 'moments', 'm1'), { [`saved.${UT}`]: true }))
+    await assertFails(updateDoc(doc(db(SATYAM), 'moments', 'm1'), { [`saved.${SATYAM}`]: 'yes' }))
+    await assertSucceeds(updateDoc(doc(db(SATYAM), 'moments', 'm1'), { [`saved.${SATYAM}`]: true }))
+    await assertSucceeds(updateDoc(doc(db(UT), 'moments', 'm1'), { [`saved.${UT}`]: true }))
+    await assertFails(deleteDoc(doc(db(SATYAM), 'moments', 'm1')))
+    await assertFails(deleteDoc(doc(db(STRANGER), 'moments', 'm1')))
+    await assertSucceeds(updateDoc(doc(db(SATYAM), 'moments', 'm1'), { [`saved.${SATYAM}`]: false }))
+    await assertSucceeds(updateDoc(doc(db(UT), 'moments', 'm1'), { [`saved.${UT}`]: false }))
+    await assertSucceeds(deleteDoc(doc(db(UT), 'moments', 'm1')))
+  })
+
+  it('romantic invitations need both players to have romance switched on', async () => {
+    await assertSucceeds(setDoc(doc(db(UT), 'players', UT), player('ut', { romanceOff: true })))
+    await assertFails(setDoc(doc(db(UT), 'players', UT), player('ut', { romanceOff: 'maybe' })))
+    await assertFails(setDoc(doc(db(SATYAM), 'moments', 'k1'), moment(SATYAM, UT, { type: 'kiss' })))
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'moments', 'k2'), moment(SATYAM, UT, { type: 'talk', scene: 'cafe' })))
+    await assertSucceeds(updateDoc(doc(db(UT), 'players', UT), { romanceOff: false, updatedAt: serverTimestamp() }))
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'moments', 'k1'), moment(SATYAM, UT, { type: 'kiss' })))
+    // switching off again also blocks saying yes to an older romantic invitation
+    await assertSucceeds(updateDoc(doc(db(UT), 'players', UT), { romanceOff: true, updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(db(UT), 'moments', 'k1'), { status: 'accepted', variant: 'gentle', reply: '', updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(doc(db(UT), 'moments', 'k1'), { status: 'declined', variant: '', reply: '', updatedAt: serverTimestamp() }))
+  })
+})
+
+describe('postcard replies', () => {
+  const reply = (authorUid: string, postId: string, extra: Record<string, unknown> = {}) => ({ postId, authorUid, text: 'Landed safely!', createdAt: serverTimestamp(), ...extra })
+  it('need a real postcard, belong to their author, and can’t be edited', async () => {
+    await assertSucceeds(setDoc(doc(db(UT), 'postcards', 'p1'), postcard(UT)))
+    await assertFails(setDoc(doc(db(SATYAM), 'replies', 'r0'), reply(SATYAM, 'missing')))
+    await assertFails(setDoc(doc(db(SATYAM), 'replies', 'r0'), reply(UT, 'p1')))
+    await assertFails(setDoc(doc(db(SATYAM), 'replies', 'r0'), reply(SATYAM, 'p1', { text: '' })))
+    await assertFails(setDoc(doc(db(SATYAM), 'replies', 'r0'), reply(SATYAM, 'p1', { text: 'x'.repeat(201) })))
+    await assertFails(setDoc(doc(db(STRANGER), 'replies', 'r0'), reply(STRANGER, 'p1')))
+    await assertSucceeds(setDoc(doc(db(SATYAM), 'replies', 'r1'), reply(SATYAM, 'p1')))
+    await assertFails(updateDoc(doc(db(SATYAM), 'replies', 'r1'), { text: 'edited' }))
+    await assertFails(deleteDoc(doc(db(UT), 'replies', 'r1')))
+    await assertSucceeds(deleteDoc(doc(db(SATYAM), 'replies', 'r1')))
+    await assertSucceeds(getDocs(collection(db(UT), 'replies')))
+    await assertFails(getDocs(collection(db(STRANGER), 'replies')))
+  })
+})

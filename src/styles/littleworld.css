@@ -1,0 +1,502 @@
+/* Our Little World — shared moments */
+.lw {
+  display: grid;
+  gap: 10px;
+}
+.lw-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 2px solid rgba(230, 222, 245, 0.35);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 240, 0.07);
+}
+.lw-card p {
+  margin: 0;
+}
+.lw-card-title {
+  font-weight: 700;
+}
+.lw-invite {
+  border-color: var(--amber);
+}
+.lw-quote {
+  font-style: italic;
+}
+.lw-intro {
+  background: rgba(183, 169, 204, 0.18);
+}
+.lw-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: #fff1c9;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.lw-h {
+  margin: 4px 0;
+  font-size: 1rem;
+}
+.lw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lw-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(230, 222, 245, 0.3);
+  font-size: 0.9rem;
+}
+.lw-keep {
+  font-size: 0.85rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lw-closer summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lw-closer[open] {
+  display: grid;
+  gap: 8px;
+}
+.lw-blurb {
+  margin: 0;
+}
+.linkish {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 0;
+}
+.chip.on {
+  background: var(--amber);
+}
+.reactions {
+  flex-wrap: wrap;
+}
+
+/* HUD hint + postcard replies */
+.hud-world {
+  position: relative;
+}
+.hud-dot {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--coral);
+}
+.note-flag {
+  background: var(--lavender);
+  max-width: calc(100% - 32px);
+}
+.replies {
+  flex-basis: 100%;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.reply {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--amber);
+  font-size: 0.88rem;
+}
+.reply-form {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reply-form input {
+  flex: 1 1 180px;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+
+/* ---------- the stage ---------- */
+.lw-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--evening);
+  color: var(--ink);
+}
+.lw-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lw-av {
+  position: absolute;
+  bottom: 9%;
+  width: 12.5%;
+  left: var(--x);
+  transform-origin: 50% 100%;
+  transition: left 0.9s ease;
+}
+.lw-av-inner {
+  display: block;
+}
+.lw-av.flip .lw-av-inner {
+  transform: scaleX(-1);
+}
+.lw-sprite {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.av-satyam {
+  --x: 30%;
+}
+.av-ut {
+  --x: 58%;
+}
+.pose-walk .av-satyam,
+.pose-sunset .av-satyam {
+  --x: 38%;
+}
+.pose-walk .av-ut,
+.pose-sunset .av-ut {
+  --x: 50%;
+}
+.pose-hand .av-satyam {
+  --x: 41%;
+}
+.pose-hand .av-ut {
+  --x: 50%;
+}
+.pose-face .av-satyam {
+  --x: 23%;
+}
+.pose-face .av-ut {
+  --x: 66%;
+}
+.pose-hug .av-satyam {
+  --x: 42.5%;
+}
+.pose-hug .av-ut {
+  --x: 48%;
+}
+.pose-dance .av-satyam {
+  --x: 39%;
+}
+.pose-dance .av-ut {
+  --x: 51%;
+}
+.pose-kiss .av-satyam {
+  --x: 43%;
+}
+.pose-kiss .av-ut {
+  --x: 48.5%;
+}
+.pose-kiss .av-satyam {
+  transform: rotate(5deg);
+}
+.pose-kiss .av-ut {
+  transform: rotate(-5deg);
+}
+.pose-kiss.v-forehead .av-ut {
+  transform: rotate(-2deg) translateY(4%);
+}
+.pose-kiss::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 60%, rgba(242, 140, 165, 0.28), rgba(43, 34, 48, 0.25));
+  animation: lw-fade 1.6s 1.8s both;
+  pointer-events: none;
+}
+.pose-walk .lw-scroll,
+.pose-hand .lw-scroll {
+  animation: lw-scroll 9s linear infinite;
+}
+.pose-sunset .lw-dusk {
+  animation: lw-dusk 7s ease forwards;
+}
+.pose-sunset .lw-sun {
+  animation: lw-sunset 7s ease forwards;
+}
+.pose-dance.v-slow .lw-av {
+  animation: lw-sway 2.4s ease-in-out infinite;
+}
+.pose-dance.v-slow .av-ut {
+  animation-delay: -1.2s;
+}
+.pose-dance.v-silly .lw-av {
+  animation: lw-hop 0.7s ease-in-out infinite;
+}
+.pose-dance.v-silly .av-ut {
+  animation-delay: -0.35s;
+}
+.pose-hug .lw-av {
+  animation: lw-squeeze 2.2s ease-in-out infinite;
+}
+
+.lw-bubble {
+  position: absolute;
+  bottom: 104%;
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(170px, 46vw);
+  margin: 0;
+  padding: 3px 7px;
+  transform: translateX(-50%);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  animation: lw-pop 0.4s 0.3s both;
+}
+.lw-bubble.to {
+  bottom: 138%;
+  background: #f6e6f0;
+  animation-delay: 1.5s;
+}
+.lw-emote {
+  font-size: 0.9rem;
+}
+.lw-figure {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.lw-caption {
+  justify-self: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(249, 241, 223, 0.12);
+  color: var(--parchment);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  animation: lw-fade 0.6s 1.2s both;
+}
+.lw-caption.still {
+  animation: none;
+}
+.sheet-paper .lw-caption {
+  color: var(--ink);
+  background: rgba(43, 34, 48, 0.07);
+}
+.lw-preview-tag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  margin: 0;
+  padding: 2px 8px;
+  border: 2px dashed var(--ink);
+  border-radius: 6px;
+  background: #fff1c9;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.lw-hearts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lw-hearts span {
+  position: absolute;
+  bottom: 42%;
+  color: #f28ca5;
+  font-size: 0.9rem;
+  opacity: 0;
+  animation: lw-float 2.6s ease-out infinite;
+}
+.lw-petals span {
+  position: absolute;
+  top: -4%;
+  width: 4px;
+  height: 4px;
+  background: #f2b8c6;
+  animation: lw-fall 8s linear infinite;
+}
+.lw-simba {
+  position: absolute;
+  bottom: 5%;
+  left: -12%;
+  width: 9%;
+  z-index: 2;
+  animation: lw-run 3.2s linear forwards;
+}
+.pose-dance .lw-simba {
+  animation: lw-run 4s 1.5s linear infinite both;
+}
+.lw-simba-sprite {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.lw-twinkle {
+  animation: lw-twinkle 2.4s ease-in-out infinite;
+}
+.lw-glow {
+  animation: lw-twinkle 3.2s ease-in-out infinite;
+}
+.lw-firefly {
+  animation: lw-firefly 5s ease-in-out infinite;
+}
+.lw-shimmer {
+  animation: lw-twinkle 2s ease-in-out infinite;
+}
+.lw-steam {
+  animation: lw-steam 2.4s ease-in-out infinite;
+}
+
+/* reduced motion (device setting or Settings → Motion) and saved memory cards: a still picture */
+.lw-stage.still *,
+.lw-stage.still::after {
+  animation: none !important;
+  transition: none !important;
+}
+.lw-stage.still .lw-hearts span {
+  opacity: 1;
+}
+.lw-stage.still .lw-simba {
+  left: 80%;
+}
+
+.lw-memory {
+  display: grid;
+  gap: 4px;
+}
+.lw-memory .lw-bubble {
+  font-size: 0.66rem;
+}
+
+@keyframes lw-scroll {
+  to {
+    transform: translateX(-320px);
+  }
+}
+@keyframes lw-dusk {
+  to {
+    opacity: 0.35;
+  }
+}
+@keyframes lw-sunset {
+  to {
+    transform: translateY(14px);
+  }
+}
+@keyframes lw-sway {
+  0%,
+  100% {
+    transform: rotate(-4deg) translateX(-3%);
+  }
+  50% {
+    transform: rotate(4deg) translateX(3%);
+  }
+}
+@keyframes lw-hop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-14%) rotate(6deg);
+  }
+}
+@keyframes lw-squeeze {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03, 0.98);
+  }
+}
+@keyframes lw-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.9);
+  }
+}
+@keyframes lw-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes lw-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-70px) scale(1.2);
+  }
+}
+@keyframes lw-fall {
+  to {
+    transform: translate(30px, 200px) rotate(200deg);
+  }
+}
+@keyframes lw-run {
+  to {
+    left: 112%;
+  }
+}
+@keyframes lw-twinkle {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes lw-firefly {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translate(0, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(8px, -10px);
+  }
+}
+@keyframes lw-steam {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-3px);
+  }
+}

@@ -29,7 +29,8 @@ import {
   type QuerySnapshot,
 } from 'firebase/firestore'
 import { ARTIFACT_FOR, type BackgroundId, type BadgeId, type EggId, type GameId, type PieceId, type Reaction, type StickerId, type ZoneId } from '../content/ids'
-import type { FriendlyChallenge, LanguageChallenge, Postcard, ScoreDoc } from '../models/types'
+import type { MomentType, SceneId } from '../content/moments'
+import type { FriendlyChallenge, LanguageChallenge, Moment, Postcard, Reply, ScoreDoc } from '../models/types'
 import { friendlyError, type Backend } from './backend'
 import { firebaseConfig, roleFromUid } from './config'
 
@@ -82,6 +83,7 @@ export function createFirebaseBackend(): Backend {
               pieces: arr<PieceId>(data.pieces),
               visited: arr<ZoneId>(data.visited),
               letterSeen: Boolean(data.letterSeen),
+              romanceOff: data.romanceOff === true,
             })),
           )
         }, fail),
@@ -140,6 +142,37 @@ export function createFirebaseBackend(): Backend {
           touch(snap)
           h.world({ petArtifacts: (snap.data()?.petArtifacts ?? {}) as Record<string, string> })
         }, fail),
+        // Newer collections: if the published rules don't know them yet, only these features pause.
+        onSnapshot(query(collection(db, 'moments'), orderBy('createdAt', 'desc'), limit(100)), (snap) => {
+          h.moments(
+            list(snap).map(({ id, data }) => ({
+              id,
+              fromUid: data.fromUid,
+              toUid: data.toUid,
+              type: data.type as MomentType,
+              scene: data.scene as SceneId,
+              line: String(data.line ?? ''),
+              status: data.status,
+              variant: String(data.variant ?? ''),
+              reply: String(data.reply ?? ''),
+              saved: (data.saved ?? {}) as Record<string, boolean>,
+              createdAt: ms(data.createdAt),
+              updatedAt: ms(data.updatedAt),
+            }) as Moment),
+          )
+        }, (e) => h.extrasError(friendlyError(e))),
+        onSnapshot(query(collection(db, 'replies'), orderBy('createdAt', 'asc'), limit(500)), { includeMetadataChanges: true }, (snap) => {
+          h.replies(
+            list(snap).map(({ id, data, pending }) => ({
+              id,
+              postId: String(data.postId ?? ''),
+              authorUid: data.authorUid,
+              text: String(data.text ?? ''),
+              createdAt: ms(data.createdAt),
+              pending,
+            }) as Reply),
+          )
+        }, (e) => h.extrasError(friendlyError(e))),
       ]
       const onLine = () => h.sync({ kind: navigator.onLine ? 'online' : 'offline', lastSynced })
       window.addEventListener('online', onLine)
@@ -263,6 +296,38 @@ export function createFirebaseBackend(): Backend {
 
     async contributeArtifact(uid, role) {
       await setDoc(doc(db, 'sharedWorld', 'main'), { petArtifacts: { [uid]: ARTIFACT_FOR[role] }, updatedAt: serverTimestamp() }, { merge: true })
+    },
+
+    async inviteMoment(uid, toUid, input) {
+      await addDoc(collection(db, 'moments'), {
+        fromUid: uid,
+        toUid,
+        type: input.type,
+        scene: input.scene,
+        line: input.line,
+        status: 'pending',
+        variant: '',
+        reply: '',
+        saved: {},
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    },
+    async answerMoment(id, answer) {
+      await updateDoc(doc(db, 'moments', id), { status: answer.status, variant: answer.variant, reply: answer.reply, updatedAt: serverTimestamp() })
+    },
+    async keepMoment(uid, id, keep) {
+      await updateDoc(doc(db, 'moments', id), new FieldPath('saved', uid), keep)
+    },
+    async deleteMoment(id) {
+      await deleteDoc(doc(db, 'moments', id))
+    },
+
+    async addReply(uid, postId, text) {
+      await addDoc(collection(db, 'replies'), { postId, authorUid: uid, text, createdAt: serverTimestamp() })
+    },
+    async deleteReply(id) {
+      await deleteDoc(doc(db, 'replies', id))
     },
   }
 }

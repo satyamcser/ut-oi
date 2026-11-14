@@ -55,7 +55,18 @@ service cloud.firestore {
               'winter_snow', 'moonlit_rooftop'];
     }
     function stickerIds() { return ['coffee', 'paw', 'moon', 'laugh', 'sparkle', 'cat', 'lantern', 'plane']; }
-    function reactionEmojis() { return ['☕', '🐾', '🌙', '😂', '✨']; }
+    function reactionEmojis() { return ['☕', '🐾', '🌙', '😂', '✨', '🌸', '💛']; }
+    // keep in sync with src/content/moments.ts
+    function momentTypes() { return ['walk', 'sunset', 'talk', 'tease', 'comfort', 'hand', 'hug', 'dance', 'kiss']; }
+    function romanticTypes() { return ['hand', 'hug', 'dance', 'kiss']; }
+    function sceneIds() { return ['riverside', 'cafe', 'lanterns']; }
+    function variantsFor(t) {
+      return t == 'tease' ? ['grin', 'eyeroll', 'outrage']
+        : t == 'comfort' ? ['quiet', 'talk', 'joke']
+        : t == 'dance' ? ['slow', 'silly']
+        : t == 'kiss' ? ['forehead', 'gentle']
+        : ['yes'];
+    }
 
     // ---------- players/{uid}: avatar, badges, discoveries ----------
     function validAvatar(a) {
@@ -68,7 +79,8 @@ service cloud.firestore {
     function validPlayer(uid) {
       let d = incoming();
       let keys = ['role', 'displayName', 'avatar', 'badges', 'eggs', 'pieces', 'visited', 'letterSeen', 'createdAt', 'updatedAt'];
-      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+      return d.keys().hasOnly(keys.concat(['romanceOff'])) && d.keys().hasAll(keys)
+        && (!('romanceOff' in d) || d.romanceOff is bool)
         && d.role == roleOf(uid)
         && textOf(d.displayName, 1, 24)
         && validAvatar(d.avatar)
@@ -228,6 +240,85 @@ service cloud.firestore {
         && incoming().petArtifacts[me()] == myArtifact()
         && incoming().updatedAt == request.time;
       allow delete: if false;
+    }
+
+    // ---------- moments: invitations to share a little moment ----------
+    // Nothing plays as a shared moment unless the invited person says yes.
+    // Romantic gestures need both players to have them switched on.
+    function romanceOn(uid) {
+      let p = /databases/$(database)/documents/players/$(uid);
+      return !exists(p) || get(p).data.get('romanceOff', false) != true;
+    }
+    function romanceAllowed(t) {
+      return !(t in romanticTypes()) || (romanceOn(satyamUid()) && romanceOn(utUid()));
+    }
+    function validMoment() {
+      let d = incoming();
+      let keys = ['fromUid', 'toUid', 'type', 'scene', 'line', 'status', 'variant', 'reply', 'saved', 'createdAt', 'updatedAt'];
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys)
+        && d.type in momentTypes()
+        && d.scene in sceneIds()
+        && textOf(d.line, 0, 140)
+        && textOf(d.reply, 0, 140)
+        && d.variant is string
+        && d.saved is map;
+    }
+    match /moments/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer() && validMoment()
+        && incoming().fromUid == me()
+        && incoming().toUid == otherPlayer()
+        && incoming().status == 'pending'
+        && incoming().variant == ''
+        && incoming().reply == ''
+        && incoming().saved.size() == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && romanceAllowed(incoming().type);
+      allow update: if isPlayer() && (
+        // the invited person answers once, within a week; "no" carries nothing extra
+        (existing().status == 'pending' && existing().toUid == me()
+          && onlyChanged(['status', 'variant', 'reply', 'updatedAt'])
+          && incoming().updatedAt == request.time
+          && request.time < existing().createdAt + duration.value(7, 'd')
+          && textOf(incoming().reply, 0, 140)
+          && ((incoming().status == 'accepted'
+                && incoming().variant in variantsFor(existing().type)
+                && romanceAllowed(existing().type))
+              || (incoming().status == 'declined' && incoming().variant == '' && incoming().reply == '')))
+        ||
+        // after a yes, each person decides only for themselves whether to keep it
+        (existing().status == 'accepted'
+          && (existing().fromUid == me() || existing().toUid == me())
+          && onlyChanged(['saved'])
+          && incoming().saved.keys().hasOnly([satyamUid(), utUid()])
+          && incoming().saved.diff(existing().saved).affectedKeys().hasOnly([me()])
+          && incoming().saved[me()] is bool)
+      );
+      // The sender can withdraw an invitation that wasn't accepted. An accepted
+      // moment can be removed by either person as long as nobody kept it.
+      allow delete: if isPlayer() && (
+        (existing().fromUid == me() && existing().status != 'accepted')
+        || ((existing().fromUid == me() || existing().toUid == me())
+            && existing().status == 'accepted'
+            && !existing().saved.values().hasAny([true]))
+      );
+    }
+
+    // ---------- replies: a short note pinned beneath a postcard ----------
+    match /replies/{id} {
+      allow read: if isPlayer();
+      allow create: if isPlayer()
+        && incoming().keys().hasOnly(['postId', 'authorUid', 'text', 'createdAt'])
+        && incoming().keys().hasAll(['postId', 'authorUid', 'text', 'createdAt'])
+        && incoming().authorUid == me()
+        && incoming().postId is string
+        && incoming().postId.matches('^[A-Za-z0-9_-]{1,64}$')
+        && exists(/databases/$(database)/documents/postcards/$(incoming().postId))
+        && textOf(incoming().text, 1, 200)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isPlayer() && existing().authorUid == me();
     }
   }
 }

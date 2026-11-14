@@ -2,7 +2,8 @@
 // memory. Nothing is saved, nothing is shared, nobody else can see it.
 // It applies the same ownership rules as firestore.rules so the UI behaves the same.
 import { ARTIFACT_FOR, LIMITS, MAX_SCORE, type GameId, type Role } from '../content/ids'
-import type { AuthUser, FriendlyChallenge, LanguageChallenge, PlayerDoc, Postcard, ScoreDoc } from '../models/types'
+import { isExpired, momentDef, MOMENT_LIMITS } from '../content/moments'
+import type { AuthUser, FriendlyChallenge, LanguageChallenge, Moment, PlayerDoc, Postcard, Reply, ScoreDoc } from '../models/types'
 import type { Backend, WatchHandlers } from './backend'
 
 export const DEMO_UIDS: Record<Role, string> = { satyam: 'demo-satyam', ut: 'demo-ut' }
@@ -20,6 +21,8 @@ export function createDemoBackend(): Backend {
   let langs: LanguageChallenge[] = []
   let friendly: FriendlyChallenge[] = []
   const petArtifacts: Record<string, string> = {}
+  let moments: Moment[] = []
+  let replies: Reply[] = []
   const watchers = new Set<WatchHandlers>()
 
   const emit = () => {
@@ -30,6 +33,8 @@ export function createDemoBackend(): Backend {
       h.languageChallenges([...langs])
       h.friendlyChallenges([...friendly])
       h.world({ petArtifacts: { ...petArtifacts } })
+      h.moments([...moments])
+      h.replies([...replies])
       h.sync({ kind: 'demo' })
     }
   }
@@ -38,6 +43,7 @@ export function createDemoBackend(): Backend {
     return user.uid
   }
   const other = () => (me() === DEMO_UIDS.satyam ? DEMO_UIDS.ut : DEMO_UIDS.satyam)
+  const romanceOn = () => ![...players.values()].some((p) => p.romanceOff)
   const checkText = (t: string, max: number, min = 0) => {
     if (t.length < min || t.length > max) throw new Error(`Please keep it between ${min} and ${max} characters.`)
   }
@@ -85,6 +91,7 @@ export function createDemoBackend(): Backend {
         pieces: [],
         visited: [],
         letterSeen: false,
+        romanceOff: false,
       }
       players.set(uid, { ...base, ...patch, uid, role })
       emit()
@@ -204,6 +211,59 @@ export function createDemoBackend(): Backend {
       await tick()
       if (uid !== me()) throw new Error('permission-denied')
       petArtifacts[uid] = ARTIFACT_FOR[role]
+      emit()
+    },
+
+    async inviteMoment(uid, toUid, input) {
+      await tick()
+      if (uid !== me() || toUid !== other()) throw new Error('permission-denied')
+      checkText(input.line, MOMENT_LIMITS.line)
+      if (momentDef(input.type).romantic && !romanceOn()) throw new Error('Romantic gestures are switched off right now.')
+      const now = Date.now()
+      moments = [{ id: id(), fromUid: uid, toUid, ...input, status: 'pending', variant: '', reply: '', saved: {}, createdAt: now, updatedAt: now }, ...moments]
+      emit()
+    },
+    async answerMoment(mid, answer) {
+      await tick()
+      const m = moments.find((x) => x.id === mid)
+      if (!m || m.toUid !== me() || m.status !== 'pending' || isExpired(m.createdAt)) throw new Error('permission-denied')
+      checkText(answer.reply, MOMENT_LIMITS.reply)
+      if (answer.status === 'accepted') {
+        if (!momentDef(m.type).variants.some((v) => v.id === answer.variant)) throw new Error('permission-denied')
+        if (momentDef(m.type).romantic && !romanceOn()) throw new Error('Romantic gestures are switched off right now.')
+      } else if (answer.variant || answer.reply) throw new Error('permission-denied')
+      moments = moments.map((x) => (x.id === mid ? { ...x, ...answer, updatedAt: Date.now() } : x))
+      emit()
+    },
+    async keepMoment(uid, mid, keep) {
+      await tick()
+      const m = moments.find((x) => x.id === mid)
+      if (uid !== me() || !m || m.status !== 'accepted' || (m.fromUid !== uid && m.toUid !== uid)) throw new Error('permission-denied')
+      moments = moments.map((x) => (x.id === mid ? { ...x, saved: { ...x.saved, [uid]: keep } } : x))
+      emit()
+    },
+    async deleteMoment(mid) {
+      await tick()
+      const m = moments.find((x) => x.id === mid)
+      const mine = m && (m.fromUid === me() || m.toUid === me())
+      const ok = m && ((m.fromUid === me() && m.status !== 'accepted') || (mine && m.status === 'accepted' && !Object.values(m.saved).some(Boolean)))
+      if (!ok) throw new Error('permission-denied')
+      moments = moments.filter((x) => x.id !== mid)
+      emit()
+    },
+
+    async addReply(uid, postId, text) {
+      await tick()
+      if (uid !== me() || !postcards.some((p) => p.id === postId)) throw new Error('permission-denied')
+      checkText(text, MOMENT_LIMITS.postcardReply, 1)
+      replies = [...replies, { id: id(), postId, authorUid: uid, text, createdAt: Date.now(), pending: false }]
+      emit()
+    },
+    async deleteReply(rid) {
+      await tick()
+      const r = replies.find((x) => x.id === rid)
+      if (!r || r.authorUid !== me()) throw new Error('permission-denied')
+      replies = replies.filter((x) => x.id !== rid)
       emit()
     },
   }

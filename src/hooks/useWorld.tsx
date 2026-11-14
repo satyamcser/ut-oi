@@ -5,9 +5,11 @@ import type {
   AuthUser,
   FriendlyChallenge,
   LanguageChallenge,
+  Moment,
   PlayerDoc,
   PlayerPatch,
   Postcard,
+  Reply,
   ScoreDoc,
   ScoreResult,
   SharedWorld,
@@ -28,6 +30,10 @@ interface WorldValue {
   langs: LanguageChallenge[]
   friendly: FriendlyChallenge[]
   world: SharedWorld
+  moments: Moment[]
+  replies: Reply[]
+  /** Set when the newer shared features (moments, replies) can't sync. */
+  extrasError: string | null
   sync: SyncState
   error: string | null
   denied: boolean
@@ -49,6 +55,9 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
   const [langs, setLangs] = useState<LanguageChallenge[]>([])
   const [friendly, setFriendly] = useState<FriendlyChallenge[]>([])
   const [world, setWorld] = useState<SharedWorld>({ petArtifacts: {} })
+  const [moments, setMoments] = useState<Moment[]>([])
+  const [replies, setReplies] = useState<Reply[]>([])
+  const [extrasError, setExtrasError] = useState<string | null>(null)
   const [sync, setSync] = useState<SyncState>({ kind: backend.mode === 'demo' ? 'demo' : 'online', lastSynced: null } as SyncState)
   const [error, setError] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
@@ -80,6 +89,12 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
       languageChallenges: setLangs,
       friendlyChallenges: setFriendly,
       world: setWorld,
+      moments: (l) => {
+        setMoments(l)
+        setExtrasError(null)
+      },
+      replies: setReplies,
+      extrasError: setExtrasError,
       sync: setSync,
       error: (m) => {
         if (/said no/i.test(m)) setDenied(true)
@@ -155,6 +170,9 @@ export function WorldProvider({ backend, children }: { backend: Backend; childre
     langs,
     friendly,
     world,
+    moments,
+    replies,
+    extrasError,
     sync,
     error,
     denied,

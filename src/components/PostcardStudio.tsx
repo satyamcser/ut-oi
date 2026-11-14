@@ -4,7 +4,9 @@ import { BACKGROUNDS, LIMITS, REACTIONS, STICKERS, type BackgroundId, type React
 import { friendlyError } from '../data/backend'
 import { useSettings } from '../hooks/useSettings'
 import { nameOf, useWorld } from '../hooks/useWorld'
-import type { Postcard } from '../models/types'
+import type { Postcard, Reply } from '../models/types'
+import { MOMENT_LIMITS } from '../content/moments'
+import { MemoryCard, useAvatars } from './LittleWorld'
 import { PostcardArt } from './PostcardArt'
 import { Sheet, timeAgo } from './ui'
 
@@ -55,10 +57,13 @@ export function CardView({
   )
 }
 
-export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () => void; startTab?: 'compose' | 'album' }) {
-  const { backend, user, role, postcards, players, unlock } = useWorld()
+type StudioTab = 'compose' | 'album' | 'moments'
+
+export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () => void; startTab?: StudioTab }) {
+  const { backend, user, role, postcards, players, unlock, replies, moments, extrasError } = useWorld()
   const { toast, play } = useSettings()
-  const [tab, setTab] = useState<'compose' | 'album'>(startTab)
+  const avatars = useAvatars()
+  const [tab, setTab] = useState<StudioTab>(startTab)
   const [bg, setBg] = useState<BackgroundId>('moonlit_rooftop')
   const [text, setText] = useState('')
   const [stickers, setStickers] = useState<StickerId[]>([])
@@ -147,6 +152,8 @@ export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () 
   }
 
   const album = postcards.filter((p) => p.kind !== 'echo' || p.text)
+  // A moment joins the album only when both people chose to keep it.
+  const kept = moments.filter((m) => m.status === 'accepted' && m.saved[m.fromUid] === true && m.saved[m.toUid] === true)
 
   return (
     <Sheet title="The Moonlit Postcard Studio" onClose={onClose} wide tone="night">
@@ -157,9 +164,23 @@ export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () 
         <button role="tab" aria-selected={tab === 'album'} className={`tab ${tab === 'album' ? 'on' : ''}`} onClick={() => setTab('album')}>
           Shared album ({album.length})
         </button>
+        <button role="tab" aria-selected={tab === 'moments'} className={`tab ${tab === 'moments' ? 'on' : ''}`} onClick={() => setTab('moments')}>
+          Our moments ({kept.length})
+        </button>
       </div>
 
-      {tab === 'compose' ? (
+      {tab === 'moments' ? (
+        <div className="album">
+          {kept.length === 0 && (
+            <p className="empty">
+              Nothing here yet. When you share a moment in Our Little World and you both choose “Keep in our album”, it lands here as a little illustrated card.
+            </p>
+          )}
+          {kept.map((m) => (
+            <MemoryCard key={m.id} m={m} avatars={avatars} />
+          ))}
+        </div>
+      ) : tab === 'compose' ? (
         <div className="studio">
           <div className="bg-grid" role="radiogroup" aria-label="Background">
             {BACKGROUNDS.map((b) => (
@@ -242,6 +263,7 @@ export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () 
                       )
                     })}
                   </span>
+                  <Replies postId={p.id} list={replies.filter((r) => r.postId === p.id)} disabled={Boolean(extrasError) || p.pending} authorName={authorName} />
                   {mine && editing?.id !== p.id && (
                     <span className="row">
                       {p.kind !== 'echo' && (
@@ -277,6 +299,71 @@ export function PostcardStudio({ onClose, startTab = 'compose' }: { onClose: () 
         </div>
       )}
     </Sheet>
+  )
+}
+
+/** Short replies pinned beneath a postcard. Each person can delete only their own. */
+function Replies({ postId, list, disabled, authorName }: { postId: string; list: Reply[]; disabled: boolean; authorName: (uid: string) => string }) {
+  const { backend, user } = useWorld()
+  const { toast, play } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  if (!user) return null
+  const send = async () => {
+    const t = text.trim()
+    if (!t) return
+    setBusy(true)
+    try {
+      await backend.addReply(user.uid, postId, t)
+      play('paper')
+      setText('')
+      setOpen(false)
+    } catch (e) {
+      toast(`Reply not sent: ${friendlyError(e)}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="replies">
+      {list.map((r) => (
+        <p key={r.id} className="reply">
+          <strong>{authorName(r.authorUid)}:</strong> {r.text} <span className="fine">· {r.pending ? 'sending…' : timeAgo(r.createdAt)}</span>
+          {r.authorUid === user.uid && (
+            <>
+              {' '}
+              <button className="linkish fine" onClick={() => window.confirm('Delete this reply?') && backend.deleteReply(r.id).catch((e) => toast(friendlyError(e), 'error'))}>
+                delete
+              </button>
+            </>
+          )}
+        </p>
+      ))}
+      {open ? (
+        <form
+          className="reply-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void send()
+          }}
+        >
+          <input value={text} maxLength={MOMENT_LIMITS.postcardReply} onChange={(e) => setText(e.target.value)} placeholder="A short reply…" aria-label="Reply" autoFocus />
+          <button className="btn btn-small btn-primary" disabled={busy || !text.trim()}>
+            Send
+          </button>
+          <button type="button" className="btn btn-small btn-ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        !disabled && (
+          <button className="btn btn-small btn-ghost" onClick={() => setOpen(true)}>
+            Reply
+          </button>
+        )
+      )}
+    </div>
   )
 }
 

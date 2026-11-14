@@ -17,7 +17,6 @@ export type Ingredient =
   | 'tea'
   | 'hotwater'
   | 'cat'
-  | 'chili'
   | 'invoice'
 
 export const INGREDIENT_LABEL: Record<Ingredient, string> = {
@@ -32,11 +31,10 @@ export const INGREDIENT_LABEL: Record<Ingredient, string> = {
   tea: 'Tea leaves',
   hotwater: 'Hot water',
   cat: 'Sleepy Cat',
-  chili: 'Chili sauce',
   invoice: 'Lesson invoice',
 }
 
-export const DECOYS: Ingredient[] = ['cat', 'chili', 'invoice']
+export const DECOYS: Ingredient[] = ['cat', 'invoice']
 
 export interface Recipe {
   id: string

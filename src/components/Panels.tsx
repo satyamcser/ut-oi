@@ -46,6 +46,7 @@ export function ZonePanel({
   onPlay,
   onStudio,
   onAlbum,
+  onWorld,
   onAcademy,
   onPawprints,
   onLetter,
@@ -55,6 +56,7 @@ export function ZonePanel({
   onPlay: (g: GameId) => void
   onStudio: () => void
   onAlbum: () => void
+  onWorld: () => void
   onAcademy: () => void
   onPawprints: () => void
   onLetter: () => void
@@ -170,6 +172,9 @@ export function ZonePanel({
             <button className="btn" onClick={onAlbum}>
               Open the shared album
             </button>
+            <button className="btn" onClick={onWorld}>
+              💞 Our Little World
+            </button>
             <button className="btn" disabled={echoBusy} onClick={() => void sendEcho()}>
               Send a little “{role === 'ut' ? 'Satyam ơi' : 'Út ơi'}” ✈
             </button>
@@ -240,8 +245,9 @@ export function SettingsPanel({
   onLetter: () => void
 }) {
   const { settings, setSettings, toast } = useSettings()
-  const { backend, user, sync, role } = useWorld()
+  const { backend, user, sync, role, me, updateMe } = useWorld()
   const [busy, setBusy] = useState(false)
+  const [romanceBusy, setRomanceBusy] = useState(false)
   return (
     <Sheet title="Settings" onClose={onClose}>
       <p className="disclaimer">{DISCLAIMER}</p>
@@ -264,6 +270,26 @@ export function SettingsPanel({
           ))}
         </div>
       </fieldset>
+      {me && (
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={!me.romanceOff}
+            disabled={romanceBusy}
+            onChange={async (e) => {
+              setRomanceBusy(true)
+              try {
+                await updateMe({ romanceOff: !e.target.checked })
+              } catch (err) {
+                toast(friendlyError(err), 'error')
+              } finally {
+                setRomanceBusy(false)
+              }
+            }}
+          />{' '}
+          Romantic gestures in Our Little World (hand, hug, dance, kiss) <span className="fine">— always invitations; turning this off hides them for both of you</span>
+        </label>
+      )}
       <button className="btn" onClick={onAvatar}>
         Change my look
       </button>
@@ -293,9 +319,16 @@ export function SettingsPanel({
         ))}
       </dl>
 
+      <h3>About this little world</h3>
+      <ul className="controls">
+        <li>A small private web game made by Satyam, just for the two of you. No ads, no downloads, no tracking, no extra permissions.</li>
+        <li>It runs entirely in this browser tab. The only outside services are GitHub Pages (hosts the page), Google Fonts (the two typefaces) and Google Firebase (sign-in and the private shared data).</li>
+        <li>In Our Little World, every shared moment is an invitation. Saying “maybe another time” is always fine, and nothing in the game is a real-life promise.</li>
+      </ul>
+
       <h3>Your data</h3>
       <ul className="controls">
-        <li>Saved for both of you to see: avatar, best scores, shared postcards, reactions, questions and challenges.</li>
+        <li>Saved for both of you to see: avatar, best scores, shared postcards, replies, reactions, questions, challenges and Our Little World invitations.</li>
         <li>Saved only on this device: sound/motion settings and “just for me” postcards.</li>
         <li>Never collected: photos, location, contacts, camera, microphone, online status or visit times.</li>
         <li>

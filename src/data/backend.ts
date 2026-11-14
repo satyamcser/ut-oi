@@ -4,10 +4,14 @@ import type {
   ChallengeInput,
   FriendlyChallenge,
   LanguageChallenge,
+  Moment,
+  MomentAnswer,
+  MomentInput,
   PlayerDoc,
   PlayerPatch,
   Postcard,
   PostcardInput,
+  Reply,
   ScoreDoc,
   ScoreResult,
   SharedWorld,
@@ -21,8 +25,16 @@ export interface WatchHandlers {
   languageChallenges(list: LanguageChallenge[]): void
   friendlyChallenges(list: FriendlyChallenge[]): void
   world(w: SharedWorld): void
+  moments(list: Moment[]): void
+  replies(list: Reply[]): void
   sync(s: SyncState): void
   error(message: string): void
+  /**
+   * Errors from the newer collections (moments, replies). Kept separate so a
+   * database that hasn't got the updated rules yet only disables those
+   * features instead of locking the whole world.
+   */
+  extrasError(message: string): void
 }
 
 /**
@@ -59,6 +71,14 @@ export interface Backend {
   deleteFriendlyChallenge(id: string): Promise<void>
 
   contributeArtifact(uid: string, role: Role): Promise<void>
+
+  inviteMoment(uid: string, toUid: string, input: MomentInput): Promise<void>
+  answerMoment(id: string, answer: MomentAnswer): Promise<void>
+  keepMoment(uid: string, id: string, keep: boolean): Promise<void>
+  deleteMoment(id: string): Promise<void>
+
+  addReply(uid: string, postId: string, text: string): Promise<void>
+  deleteReply(id: string): Promise<void>
 
   /** Demo only. */
   demoSignIn?(role: Role): void

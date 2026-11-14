@@ -7,7 +7,6 @@ import { useSettings } from '../../hooks/useSettings'
 import { nameOf, useWorld } from '../../hooks/useWorld'
 import type { LanguageChallenge } from '../../models/types'
 import { languageScore } from '../../utils/games'
-import { Stamp } from '../ui'
 import { GameFrame, SaveLine, useScoreSave } from './GameFrame'
 
 type Tab = 'quiz' | 'inbox' | 'ask' | 'teach'
@@ -34,7 +33,7 @@ function Quiz({ onFinished }: { onFinished: (score: number, dir: Direction) => v
   if (!dir)
     return (
       <div className="quiz-pick">
-        <p>Pick a direction. Same questions for both of you; scoring is for the game, never for the person.</p>
+        <p>Totally optional — a few phrase flashcards, just for fun. No grades, nothing to prove. Close it anytime.</p>
         <button className="btn btn-primary btn-big" onClick={() => start('vi-en')} data-autofocus>
           Vietnamese → English
         </button>
@@ -45,13 +44,11 @@ function Quiz({ onFinished }: { onFinished: (score: number, dir: Direction) => v
     )
 
   if (done) {
-    const score = languageScore(correct, QUIZ_LENGTH)
     return (
       <div className="result-card">
-        <Stamp text={`${score}/96`} tone="jasmine" />
-        <h3>{correct === QUIZ_LENGTH ? 'Flawless. Suspiciously flawless.' : correct >= 5 ? 'Diploma-worthy (coffee-funded).' : 'Every lesson counts. Even the confusing ones.'}</h3>
-        <p>
-          {correct} of {QUIZ_LENGTH} correct · +10 per correct answer, +2 for trying each one.
+        <h3>That’s the round. Thanks for flipping through.</h3>
+        <p className="fine">
+          {correct} of {QUIZ_LENGTH} matched. Just for fun — the cat isn’t keeping score, and neither are we.
         </p>
         <SaveLine state={saveState} onRetry={() => void retry()} demo={demo} />
         <button className="btn btn-primary" onClick={() => setDir(null)}>
@@ -83,7 +80,7 @@ function Quiz({ onFinished }: { onFinished: (score: number, dir: Direction) => v
   return (
     <div className="quiz">
       <p className="quiz-progress">
-        Question {i + 1}/{qs.length} · {dir === 'vi-en' ? 'What does this mean?' : 'How would you say this in Vietnamese?'}
+        Card {i + 1}/{qs.length} · {dir === 'vi-en' ? 'What does this mean?' : 'How would you say this in Vietnamese?'}
       </p>
       <p className="quiz-prompt" lang={dir === 'vi-en' ? 'vi' : 'en'}>
         {q.prompt}
@@ -104,7 +101,7 @@ function Quiz({ onFinished }: { onFinished: (score: number, dir: Direction) => v
       {picked !== null && (
         <div className="explain" aria-live="polite">
           <p>
-            {picked === q.correct ? 'Correct!' : 'Friendly correction:'} <strong lang={dir === 'vi-en' ? 'vi' : 'en'}>{q.prompt}</strong> →{' '}
+            {picked === q.correct ? 'Yes!' : 'Here it is:'} <strong lang={dir === 'vi-en' ? 'vi' : 'en'}>{q.prompt}</strong> →{' '}
             <strong lang={dir === 'vi-en' ? 'en' : 'vi'}>{q.options[q.correct]}</strong>
           </p>
           {q.note && <p className="fine">{q.note}</p>}
@@ -169,7 +166,7 @@ function ChallengeComposer({ initial, onSubmit, onCancel, busy }: { initial?: La
 export function LanguageAcademy({ onExit, onQuizDone }: { onExit: () => void; onQuizDone: (score: number, dir: Direction) => void }) {
   const { backend, user, role, langs, partnerUid, unlock } = useWorld()
   const { toast, play } = useSettings()
-  const [tab, setTab] = useState<Tab>('quiz')
+  const [tab, setTab] = useState<Tab>('teach')
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [dictionary, setDictionary] = useState(false)
@@ -194,7 +191,7 @@ export function LanguageAcademy({ onExit, onQuizDone }: { onExit: () => void; on
   }
 
   return (
-    <GameFrame game="language" onExit={onExit} rules="A tiny two-way classroom: quiz yourself, send a custom question, or teach one phrase you like.">
+    <GameFrame game="language" onExit={onExit} rules="A tiny two-way phrase swap: share a phrase you like, send a fun question, or flip some flashcards if you feel like it. Nothing here is a test.">
       <div className="academy">
         <div className="chalk" aria-label="Chalkboard">
           <p>Lesson 01: How to say “ơi” without using it in every sentence.</p>
@@ -214,10 +211,10 @@ export function LanguageAcademy({ onExit, onQuizDone }: { onExit: () => void; on
         <div className="tabs" role="tablist">
           {(
             [
-              ['quiz', 'Quiz duel'],
+              ['teach', 'Swap a phrase'],
               ['inbox', `From ${partnerName}${inbox.some((c) => c.status === 'open') ? ' •' : ''}`],
               ['ask', `Ask ${partnerName}`],
-              ['teach', 'Teach me one thing'],
+              ['quiz', 'Flashcards (optional)'],
             ] as [Tab, string][]
           ).map(([t, l]) => (
             <button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>

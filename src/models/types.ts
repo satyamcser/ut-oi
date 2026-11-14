@@ -1,4 +1,5 @@
 import type { BackgroundId, BadgeId, EggId, GameId, PieceId, Reaction, Role, StickerId, ZoneId } from '../content/ids'
+import type { MomentType, SceneId } from '../content/moments'
 
 export interface AvatarConfig {
   hair: number // 0..3 style
@@ -18,6 +19,8 @@ export interface PlayerDoc {
   pieces: PieceId[]
   visited: ZoneId[]
   letterSeen: boolean
+  /** Romantic gestures (hand, hug, dance, kiss) switched off by this player. */
+  romanceOff: boolean
 }
 
 export type PlayerPatch = Partial<Omit<PlayerDoc, 'uid' | 'role'>>
@@ -80,6 +83,45 @@ export interface FriendlyChallenge {
 
 export interface SharedWorld {
   petArtifacts: Record<string, string>
+}
+
+/** An invitation to share a little moment. Nothing happens unless the other person says yes. */
+export interface Moment {
+  id: string
+  fromUid: string
+  toUid: string
+  type: MomentType
+  scene: SceneId
+  line: string
+  status: 'pending' | 'accepted' | 'declined'
+  variant: string
+  reply: string
+  /** Each person decides for themselves whether to keep it in the album. */
+  saved: Record<string, boolean>
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export interface MomentInput {
+  type: MomentType
+  scene: SceneId
+  line: string
+}
+
+export interface MomentAnswer {
+  status: 'accepted' | 'declined'
+  variant: string
+  reply: string
+}
+
+/** A short reply pinned beneath a postcard. */
+export interface Reply {
+  id: string
+  postId: string
+  authorUid: string
+  text: string
+  createdAt: number | null
+  pending: boolean
 }
 
 export interface AuthUser {

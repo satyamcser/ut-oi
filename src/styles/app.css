@@ -1022,7 +1022,6 @@ textarea {
   transform: translateY(-50%);
 }
 .falling.cat,
-.falling.chili,
 .falling.invoice {
   background: #f6e6e2;
 }

@@ -15,10 +15,23 @@ accounts can read.
 | Place | What you can do |
 | --- | --- |
 | ☕ **Cà Phê Cóc & The Outstanding Coffee Debt** | **Matcha Mission** — catch falling ingredients in recipe order (matcha latte, cà phê sữa đá, warm tea; oat-milk option). Coffee Debt Ledger, voucher. |
-| 📚 **The Very Unofficial Language Academy** | **Language Exchange Duel** (Vietnamese → English or English → Vietnamese), custom questions for each other (answer or skip), “Teach me one thing”. |
+| 📚 **The Very Unofficial Language Academy** | **Swap a phrase** you like, fun questions for each other (answer or skip), and optional **Phrase Flashcards** — no grades, never a test. |
 | 🐾 **Simba & the Sleepy Cat Investigation Bureau** | **Find the Missing Pawprints** — a walkable maze; search leaf piles; each player also finds a special object → a shared pet portrait. |
 | 🎤 **Professor Út’s Confidence Test** | **Presentation Rescue** — match icons to slides, clear distractions, wave back at the audience. Unofficial Review Certificate. |
-| 🌙 **The Moonlit Postcard Studio** | 8 illustrated backgrounds, stickers, “Just for me” or “Share with our little universe”, shared album with reactions, a little “ơi” paper airplane, a poem. |
+| 🌙 **The Moonlit Postcard Studio** | 8 illustrated backgrounds, stickers, “Just for me” or “Share with our little universe”, shared album with reactions and short **replies** under each card, an **Our moments** album, a little “ơi” paper airplane, a poem. |
+| 💞 **Our Little World** (HUD button) | Riverside walk, moonlit café and lantern garden with both avatars. Walk together, watch the sunset, sit and talk, tease a little, “Long day?” — and, optionally, offer a hand, hug, dance or kiss. Every shared moment is an **invitation** the other person can accept or decline (“maybe another time” is always fine). Simba interrupts. |
+
+### How invitations work in Our Little World
+
+- One person picks a moment and a short line; the other sees a gentle invitation next time they visit.
+- They can say yes (sometimes choosing *how*, e.g. slow or silly dance, forehead or gentle kiss) or “maybe another time”.
+  A no carries no points, no penalty and no sad reaction. Unanswered invitations quietly expire after a week.
+- Only after a yes does the moment play — for both people. Each person decides for themselves whether to keep it;
+  it appears in **Our moments** only if both kept it.
+- **Settings → Romantic gestures** switches hand/hug/dance/kiss off. If either person turns it off, they’re hidden
+  for both, and the database rules refuse them too.
+- **Preview** plays any moment locally in “story mode”, clearly labelled — it never fakes a reply from the other person.
+- It’s a game: nothing in it is a real-life promise or decision.
 
 Also: customisable pixel avatars (hair, skin tone, áo dài unlock, nón lá…), a Passport
 & Scorebook (best scores, coffee points, badges, discoveries, friendly “beat my score”
@@ -166,6 +179,20 @@ fill in the same values (`.env.local` is git-ignored).
 
 ---
 
+## Updating the rules (needed after this update)
+
+This update adds two collections (`moments`, `replies`), a `romanceOff` setting on players and two
+reactions (🌸 💛). The live database only allows them once the new rules are published:
+
+1. Open **`firestore.rules`**, put your two real UIDs in place of the placeholders (keep the placeholders in the
+   copy you commit — a test checks).
+2. **Firebase Console → Firestore → Rules** → paste the whole file → **Publish**.
+
+Until then the rest of the game works normally; Our Little World shows “Shared moments are resting for now”,
+replies are hidden, and previews still work.
+
+---
+
 ## Private vs. public — what to know
 
 - **Public:** the website code on GitHub Pages (HTML/JS/CSS), including all in-game
@@ -173,8 +200,9 @@ fill in the same values (`.env.local` is git-ignored).
   the URL can load the page and read its source. `noindex` keeps it out of search
   engines but is **not** a privacy control.
 - **Private (only your two accounts):** everything in Firestore — profiles, scores,
-  shared postcards, reactions, questions and challenges.
-- **On one device only:** sound/motion settings and “Just for me” postcards.
+  shared postcards, replies, reactions, questions, challenges and Our Little World invitations.
+- **On one device only:** sound/motion settings, “Just for me” postcards, and which invitation
+  answers you’ve already looked at.
 - Keep private letters, family matters and photos **out of the code**.
 
 ## Editing things
@@ -183,6 +211,7 @@ fill in the same values (`.env.local` is git-ignored).
 | --- | --- |
 | The folded letter | `src/content/letter.ts` |
 | Dialogue, tips, poem, jokes | `src/content/dialogue.ts` |
+| Our Little World moments, lines, Simba events | `src/content/moments.ts` (keep the lists in `firestore.rules` in sync — a test checks) |
 | Vietnamese / English phrases | `src/content/phrases.ts` |
 | Scores, recipes, slides | `src/utils/games.ts` (keep `MAX_SCORE` in `src/content/ids.ts` and `firestore.rules` in sync — a test checks) |
 | New badges / stickers / backgrounds | `src/content/ids.ts` **and** the matching list in `firestore.rules` |
@@ -202,7 +231,10 @@ fill in the same values (`.env.local` is git-ignored).
 - **Honest limit:** scores are reported by the browser. The rules bound them (range,
   exactly +1 play per save, best = max, max one save per 3 s) but can’t prove a game was
   really played. That’s fine for a friendly two-person game.
-- `npm run test:rules` runs 13 emulator tests as a stranger, a signed-out visitor, and
+- Invitations: only the invited person can answer, once, within a week, with an allowed
+  choice; a “no” can’t carry any extra text. Each person can only set their own “keep”.
+  Romantic invitations are refused if either player has switched them off.
+- `npm run test:rules` runs 19 emulator tests as a stranger, a signed-out visitor, and
   each player trying to impersonate the other.
 
 ## Troubleshooting
@@ -223,7 +255,7 @@ fill in the same values (`.env.local` is git-ignored).
   from `firestore.rules` (publish).
 - **Delete your own postcards:** in the game, **Settings → Delete all my postcards**.
 - **Wipe everything:** in **Firestore → Data**, delete the collections (`players`,
-  `scores`, `postcards`, `languageChallenges`, `friendlyChallenges`, `sharedWorld`).
+  `scores`, `postcards`, `languageChallenges`, `friendlyChallenges`, `sharedWorld`, `moments`, `replies`).
 
 ---
 

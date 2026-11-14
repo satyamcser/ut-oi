@@ -5,6 +5,7 @@ import { BACKGROUND_IDS_FOR_TEST, BADGE_IDS_FOR_TEST } from './helpers'
 import { EGG_IDS, GAME_IDS, MAX_SCORE, PIECE_IDS, REACTIONS, STICKERS, ZONES } from '../src/content/ids'
 import { buildQuiz, ENGLISH_ITEMS, GLOSSARY, QUIZ_LENGTH } from '../src/content/phrases'
 import { talkStatus } from '../src/content/dialogue'
+import { isExpired, MOMENT_TTL_MS, MOMENT_TYPES, MOMENTS, SCENE_IDS } from '../src/content/moments'
 import { BLOCKING, T } from '../src/game/art/pixels'
 import { buildMaze, hideClues, MAZE, MAZE_START, pawprintScore } from '../src/game/map/courtyardMaze'
 import { buildHanoiMap, MAP_H, MAP_W } from '../src/game/map/hanoiMap'
@@ -135,7 +136,7 @@ describe('Matcha Mission', () => {
   it('wrong ingredients cost style, not progress', () => {
     let s = newMatcha()
     s = addIngredient(s, 'cat')
-    s = addIngredient(s, 'chili')
+    s = addIngredient(s, 'invoice')
     expect(s.wrong).toBe(2)
     expect(s.step).toBe(0)
     expect(matchaScore(s, 30).style).toBe(12)
@@ -214,6 +215,27 @@ describe('database allowlists match the app', () => {
     expect(listIn('backgroundIds')).toEqual([...BACKGROUND_IDS_FOR_TEST].sort())
     expect(listIn('stickerIds')).toEqual(STICKERS.map((s) => s.id).sort())
     expect(listIn('reactionEmojis')).toEqual([...REACTIONS].sort())
+  })
+  it('moment types, scenes, romantic types and answer choices agree', () => {
+    expect(listIn('momentTypes')).toEqual([...MOMENT_TYPES].sort())
+    expect(listIn('sceneIds')).toEqual([...SCENE_IDS].sort())
+    expect(listIn('romanticTypes')).toEqual(MOMENTS.filter((m) => m.romantic).map((m) => m.type).sort())
+    const fn = rules.match(/function variantsFor\(t\) \{([\s\S]*?)\r?\n {4}\}/)![1]
+    for (const m of MOMENTS) {
+      const ids = m.variants.map((v) => v.id)
+      if (ids.length === 1) expect(ids).toEqual(['yes'])
+      else expect(fn).toContain(`t == '${m.type}' ? [${ids.map((i) => `'${i}'`).join(', ')}]`)
+    }
+  })
+  it('every moment has a caption for each way of saying yes, and invitations expire after a week', () => {
+    for (const m of MOMENTS) {
+      for (const v of m.variants) expect(m.caption[v.id], `${m.type}/${v.id}`).toBeTruthy()
+      expect(m.scenes.length).toBeGreaterThan(0)
+    }
+    const now = Date.now()
+    expect(isExpired(now - MOMENT_TTL_MS - 1, now)).toBe(true)
+    expect(isExpired(now - 1000, now)).toBe(false)
+    expect(isExpired(null, now)).toBe(false)
   })
   it('max scores agree', () => {
     expect(rules).toContain(`gameId == 'pawprints' ? ${MAX_SCORE.pawprints} : (gameId == 'language' ? ${MAX_SCORE.language} : 100)`)

@@ -83,7 +83,6 @@ export function IngredientIcon({ kind }: { kind: Ingredient }) {
           <path d="M12 19h3M18 19h3" stroke="#2B2230" strokeWidth="1.5" />
         </g>
       )}
-      {kind === 'chili' && <path d="M8 22q10 2 16-12q2 0 2 3q-4 15-18 11z" fill="#D9534F" {...s} />}
       {kind === 'invoice' && (
         <g>
           <path d="M9 5h14v22l-3-2-2 2-2-2-2 2-2-2-3 2z" fill="#FFFFFF" {...s} />
@@ -176,7 +175,7 @@ export function MatchaMission({ onExit, onFinished }: { onExit: () => void; onFi
       setMsg(next.done ? 'All three orders served!' : next.step === 0 ? 'Order complete! Next customer…' : `${label(it.kind)} ✓`)
     } else {
       play('bad')
-      setMsg(it.kind === 'cat' ? MISC.ohNoCounter : it.kind === 'invoice' ? 'That’s the lesson invoice. It is not dissolvable.' : it.kind === 'chili' ? 'Bold. Wrong, but bold.' : `Not yet — this order needs ${label(neededIngredient(mRef.current)!)}.`)
+      setMsg(it.kind === 'cat' ? MISC.ohNoCounter : it.kind === 'invoice' ? 'That’s the lesson invoice. It is not dissolvable.' : `Not yet — this order needs ${label(neededIngredient(mRef.current)!)}.`)
     }
   }
 
